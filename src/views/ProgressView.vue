@@ -1,28 +1,28 @@
 <template>
   <div class="progress-view">
-    <h1 class="title">Прогресс</h1>
+    <h1 class="title">{{ t('progress.title') }}</h1>
 
     <div class="stats-grid">
       <div class="stat-card">
         <p class="stat-num">{{ totalCompleted }}</p>
-        <p class="stat-label">всего выполнено</p>
+        <p class="stat-label">{{ t('progress.totalDone') }}</p>
       </div>
       <div class="stat-card">
         <p class="stat-num">{{ bestStreak }}</p>
-        <p class="stat-label">лучший streak</p>
+        <p class="stat-label">{{ t('progress.bestStreak') }}</p>
       </div>
       <div class="stat-card">
         <p class="stat-num">{{ activeDays }}</p>
-        <p class="stat-label">активных дней</p>
+        <p class="stat-label">{{ t('progress.activeDays') }}</p>
       </div>
       <div class="stat-card">
         <p class="stat-num">{{ store.habits.length }}</p>
-        <p class="stat-label">привычек</p>
+        <p class="stat-label">{{ t('progress.habitsCount') }}</p>
       </div>
     </div>
 
     <div class="section">
-      <p class="section-label">Активность за 7 дней</p>
+      <p class="section-label">{{ t('progress.last7') }}</p>
       <div class="bar-chart">
         <div v-for="day in last7Days" :key="day.date" class="bar-col">
           <div class="bar-wrap">
@@ -38,7 +38,7 @@
     </div>
 
     <div class="section">
-      <p class="section-label">По привычкам</p>
+      <p class="section-label">{{ t('progress.byHabit') }}</p>
       <div class="habit-stats">
         <div v-for="habit in habitStats" :key="habit.id" class="habit-stat-card">
           <div class="habit-stat-top">
@@ -52,7 +52,7 @@
               :style="{ width: habitProgress(habit.completedDates.length) }"
             />
           </div>
-          <p class="habit-count">{{ habit.completedDates.length }} дней выполнено</p>
+          <p class="habit-count">{{ habit.completedDates.length }} {{ t('progress.daysDone') }}</p>
         </div>
       </div>
     </div>
@@ -60,6 +60,7 @@
 </template>
 
 <script setup>
+import { t } from '../i18n'
 import { computed } from 'vue'
 import { useHabitsStore } from '../stores/habits'
 
@@ -78,7 +79,7 @@ const activeDays = computed(() => {
 
 const last7Days = computed(() => {
   const days = []
-  const labels = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб']
+  const labels = t('progress.weekdays')
   for (let i = 6; i >= 0; i--) {
     const d = new Date()
     d.setDate(d.getDate() - i)

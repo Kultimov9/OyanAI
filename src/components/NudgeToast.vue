@@ -4,10 +4,10 @@
       <div class="nudge-card">
         <span class="nudge-fist">👊</span>
         <div class="nudge-text">
-          <p class="nudge-title">{{ toast.fromName }} подталкивает</p>
-          <p class="nudge-sub">Сделай «{{ toast.habitName }}» прямо сейчас</p>
+          <p class="nudge-title">{{ t('toast.nudgeTitle', { nick: toast.fromName }) }}</p>
+          <p class="nudge-sub">{{ t('toast.nudgeSub', { habit: toast.habitName }) }}</p>
         </div>
-        <button class="nudge-go" @click="act">Начать</button>
+        <button class="nudge-go" @click="act">{{ t('toast.start') }}</button>
         <button class="nudge-x" @click="close">✕</button>
       </div>
     </div>
@@ -15,6 +15,7 @@
 </template>
 
 <script setup>
+import { t } from '../i18n'
 import { computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { nudgeToast } from '../composables/uiState'

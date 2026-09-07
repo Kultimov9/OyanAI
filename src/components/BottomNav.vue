@@ -2,15 +2,15 @@
   <nav class="bottom-nav">
     <router-link to="/" class="nav-item" :class="{ active: route.path === '/' }">
       <Home :size="24" :stroke-width="route.path === '/' ? 2.5 : 1.8" />
-      <span class="label">Главная</span>
+      <span class="label">{{ t('nav.home') }}</span>
     </router-link>
     <router-link to="/tasks" class="nav-item" :class="{ active: route.path === '/tasks' }">
       <ListTodo :size="24" :stroke-width="route.path === '/tasks' ? 2.5 : 1.8" />
-      <span class="label">Задачи</span>
+      <span class="label">{{ t('nav.tasks') }}</span>
     </router-link>
     <router-link to="/habits" class="nav-item" :class="{ active: route.path === '/habits' }">
       <CheckSquare :size="24" :stroke-width="route.path === '/habits' ? 2.5 : 1.8" />
-      <span class="label">Привычки</span>
+      <span class="label">{{ t('nav.habits') }}</span>
     </router-link>
     <router-link to="/ai" class="nav-item" :class="{ active: route.path === '/ai' }">
       <Sparkles :size="24" :stroke-width="route.path === '/ai' ? 2.5 : 1.8" />
@@ -22,12 +22,13 @@
       :class="{ active: route.path === '/reflection' }"
     >
       <MessageCircle :size="24" :stroke-width="route.path === '/reflection' ? 2.5 : 1.8" />
-      <span class="label">Рефлексия</span>
+      <span class="label">{{ t('nav.reflection') }}</span>
     </router-link>
   </nav>
 </template>
 
 <script setup>
+import { t } from '../i18n'
 import { useRoute } from 'vue-router'
 import { Home, CheckSquare, MessageCircle, ListTodo, Sparkles } from 'lucide-vue-next'
 const route = useRoute()

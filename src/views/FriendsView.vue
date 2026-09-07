@@ -1,29 +1,29 @@
 <template>
   <div class="friends-view">
     <div class="page-header">
-      <button class="back-btn" @click="router.replace('/profile')">← Назад</button>
-      <h1 class="title">Друзья</h1>
+      <button class="back-btn" @click="router.replace('/profile')">{{ t('common.back') }}</button>
+      <h1 class="title">{{ t('friends.title') }}</h1>
       <span />
     </div>
 
     <div class="content">
       <!-- Входящие запросы -->
       <div v-if="store.incoming.length" class="section">
-        <p class="section-label">Запросы</p>
+        <p class="section-label">{{ t('friends.requests') }}</p>
         <div class="row" v-for="f in store.incoming" :key="f.friendship_id">
           <span class="avatar" :class="{ img: f.avatar_url }">
             <img v-if="f.avatar_url" :src="f.avatar_url" alt="" />
             <span v-else>{{ initial(f.username) }}</span>
           </span>
-          <span class="name">{{ f.username || 'Без ника' }}</span>
-          <button class="btn-primary sm" @click="store.acceptRequest(f.friendship_id)">Принять</button>
-          <button class="btn-ghost sm" @click="store.declineRequest(f.friendship_id)">Отклонить</button>
+          <span class="name">{{ f.username || t('friends.noNick') }}</span>
+          <button class="btn-primary sm" @click="store.acceptRequest(f.friendship_id)">{{ t('friends.accept') }}</button>
+          <button class="btn-ghost sm" @click="store.declineRequest(f.friendship_id)">{{ t('friends.decline') }}</button>
         </div>
       </div>
 
       <!-- Мои друзья -->
       <div class="section">
-        <p class="section-label">Мои друзья</p>
+        <p class="section-label">{{ t('friends.myFriends') }}</p>
         <div v-if="store.friends.length">
           <div class="row" v-for="f in store.friends" :key="f.other_id">
             <!-- Аватар и ник ведут в профиль; кнопки справа — свои действия -->
@@ -32,28 +32,28 @@
                 <img v-if="f.avatar_url" :src="f.avatar_url" alt="" />
                 <span v-else>{{ initial(f.username) }}</span>
               </span>
-              <span class="name">{{ f.username || 'Без ника' }}</span>
+              <span class="name">{{ f.username || t('friends.noNick') }}</span>
             </button>
-            <button class="icon-btn" title="Создать общую привычку" @click="createWith(f)">
+            <button class="icon-btn" :title="t('friends.createShared')" @click="createWith(f)">
               <Users :size="18" />
             </button>
-            <button class="icon-btn danger" title="Удалить из друзей" @click="askRemove(f)">
+            <button class="icon-btn danger" :title="t('friends.removeFriend')" @click="askRemove(f)">
               <UserMinus :size="18" />
             </button>
           </div>
         </div>
         <p v-else class="empty">
-          Пока нет друзей — найди по нику ниже или отправь другу инвайт-код привычки.
+          {{ t('friends.emptyFriends') }}
         </p>
       </div>
 
       <!-- Поиск -->
       <div class="section">
-        <p class="section-label">Найти по нику или почте</p>
+        <p class="section-label">{{ t('friends.searchLabel') }}</p>
         <input
           v-model="query"
           class="search-input"
-          placeholder="Ник или почта"
+          :placeholder="t('friends.searchPlaceholder')"
           autocapitalize="off"
           autocorrect="off"
           spellcheck="false"
@@ -67,7 +67,7 @@
             </span>
             <span class="name">
               {{ displayName(r) }}
-              <i v-if="!r.username" class="name-note">ник ещё не задан</i>
+              <i v-if="!r.username" class="name-note">{{ t('friends.noNickYet') }}</i>
             </span>
             <button
               class="btn-primary sm"
@@ -79,9 +79,9 @@
           </div>
         </div>
         <template v-else-if="query.trim() && !searching">
-          <p class="empty">Никого не нашли по «{{ query }}»</p>
+          <p class="empty">{{ t('friends.notFound', { q: query }) }}</p>
           <p v-if="!looksLikeEmail(query)" class="hint">
-            Если друг ещё не задал ник — найди его по почте, введя адрес целиком.
+            {{ t('friends.emailHint') }}
           </p>
         </template>
       </div>
@@ -90,17 +90,15 @@
     <!-- Подтверждение удаления: явно говорим, что именно произойдёт -->
     <div v-if="friendToRemove" class="modal-overlay" @click="closeRemove">
       <div class="modal" @click.stop>
-        <p class="modal-title">Удалить из друзей?</p>
+        <p class="modal-title">{{ t('friends.removeTitle') }}</p>
         <p class="modal-desc">
-          <b>{{ friendToRemove.username || 'Этот пользователь' }}</b> пропадёт из твоего списка
-          друзей, а ты — из его. Общие привычки останутся: их нужно удалять отдельно.
-          Позже сможешь добавить друг друга снова.
+          <b>{{ friendToRemove.username || t('friends.thisUser') }}</b> {{ t('friends.removeDesc') }}
         </p>
         <p v-if="removeError" class="modal-error">{{ removeError }}</p>
         <div class="modal-actions">
-          <button class="modal-cancel" :disabled="removing" @click="closeRemove">Отмена</button>
+          <button class="modal-cancel" :disabled="removing" @click="closeRemove">{{ t('common.cancel') }}</button>
           <button class="modal-confirm" :disabled="removing" @click="confirmRemove">
-            {{ removing ? 'Удаляем…' : 'Удалить' }}
+            {{ removing ? t('friends.removing') : t('common.delete') }}
           </button>
         </div>
       </div>
@@ -116,6 +114,7 @@ import { useFriendsStore } from '../stores/friends'
 import { pendingPairFriend } from '../composables/uiState'
 import { requestPushPermissionOnce } from '../composables/usePush'
 import { useScreenRefresh } from '../composables/useScreenRefresh'
+import { t } from '../i18n'
 
 const router = useRouter()
 const store = useFriendsStore()
@@ -156,14 +155,14 @@ function looksLikeEmail(v) {
 // адрес: сервер почту не возвращает, а пользователь её и так только что ввёл.
 function displayName(r) {
   if (r.username) return r.username
-  return looksLikeEmail(query.value) ? query.value.trim() : 'Без ника'
+  return looksLikeEmail(query.value) ? query.value.trim() : t('friends.noNick')
 }
 
 function addLabel(id) {
   const s = store.statusWith(id)
-  if (s === 'friends') return 'Уже в друзьях'
-  if (s === 'pending') return 'Запрос отправлен'
-  return 'Добавить'
+  if (s === 'friends') return t('friends.alreadyFriends')
+  if (s === 'pending') return t('friends.requestSent')
+  return t('friends.addFriend')
 }
 
 async function add(id) {

@@ -3,18 +3,18 @@
     <div class="page-header">
       <div class="tabs">
         <button class="tab" :class="{ active: activeTab === 'tasks' }" @click="activeTab = 'tasks'">
-          Задачи
+          {{ t('tasks.tabTasks') }}
         </button>
         <button class="tab" :class="{ active: activeTab === 'goals' }" @click="activeTab = 'goals'">
-          Цели
+          {{ t('tasks.tabGoals') }}
         </button>
       </div>
     </div>
     <div class="content">
       <template v-if="activeTab === 'tasks'">
         <div class="header">
-          <h1 class="title">Задачи на сегодня</h1>
-          <p class="subtitle">{{ completedCount }} из {{ totalCount }} выполнено</p>
+          <h1 class="title">{{ t('tasks.title') }}</h1>
+          <p class="subtitle">{{ t('tasks.subtitle', { done: completedCount, total: totalCount }) }}</p>
         </div>
 
         <div class="progress-bar-wrap">
@@ -25,7 +25,7 @@
           <input
             v-model="newTask"
             class="task-input"
-            placeholder="Добавить задачу..."
+            :placeholder="t('tasks.addPlaceholder')"
             @keydown.enter="addTask"
           />
           <button class="add-btn" @click="addTask">
@@ -34,7 +34,7 @@
         </div>
 
         <div v-if="pendingTasks.length > 0" class="section">
-          <p class="section-label">Осталось</p>
+          <p class="section-label">{{ t('tasks.left') }}</p>
           <div class="task-list">
             <div
               v-for="task in pendingTasks"
@@ -52,7 +52,7 @@
         </div>
 
         <div v-if="doneTasks.length > 0" class="section">
-          <p class="section-label">Готово</p>
+          <p class="section-label">{{ t('tasks.done') }}</p>
           <div class="task-list">
             <div
               v-for="task in doneTasks"
@@ -73,31 +73,30 @@
 
         <div v-if="totalCount === 0" class="empty">
           <p class="empty-emoji">✨</p>
-          <p class="empty-title">День чистый</p>
+          <p class="empty-title">{{ t('tasks.emptyTitle') }}</p>
           <p class="empty-text">
-            Добавь первую задачу — даже одно маленькое дело уже движение вперёд
+            {{ t('tasks.emptyText') }}
           </p>
         </div>
 
         <div v-if="totalCount > 0 && completedCount === totalCount" class="congrats">
-          <p class="congrats-text">🎉 Все задачи выполнены!</p>
+          <p class="congrats-text">{{ t('tasks.allDone') }}</p>
         </div>
       </template>
 
       <template v-if="activeTab === 'goals'">
         <div class="header">
-          <h1 class="title">Ближайшие цели</h1>
+          <h1 class="title">{{ t('tasks.goalsTitle') }}</h1>
           <p class="subtitle">
-            {{ store.goals.filter((g) => goalProgress(g) === 100).length }} из
-            {{ store.goals.length }} достигнуто
+            {{ t('tasks.goalsSubtitle', { done: store.goals.filter((g) => goalProgress(g) === 100).length, total: store.goals.length }) }}
           </p>
         </div>
         <div class="add-goal-form">
-          <input v-model="newGoalTitle" class="goal-input" placeholder="Название цели..." />
+          <input v-model="newGoalTitle" class="goal-input" :placeholder="t('tasks.goalPlaceholder')" />
           <div class="goal-date-row">
             <label class="date-label">
               <span class="date-label-text">
-                📅 {{ newGoalDeadline ? formatDate(newGoalDeadline) : 'Срок выполнения' }}
+                📅 {{ newGoalDeadline ? formatDate(newGoalDeadline) : t('tasks.deadline') }}
               </span>
               <input v-model="newGoalDeadline" type="date" class="date-hidden" />
             </label>
@@ -108,7 +107,7 @@
         </div>
 
         <div v-if="store.goals.length === 0" class="empty">
-          <p class="empty-text">Добавь первую цель</p>
+          <p class="empty-text">{{ t('tasks.emptyGoals') }}</p>
         </div>
 
         <div class="goal-list">
@@ -162,7 +161,7 @@
               <input
                 v-model="newSteps[goal.id]"
                 class="step-input"
-                placeholder="Добавить шаг..."
+                :placeholder="t('tasks.addStep')"
                 @keydown.enter="addStep(goal.id)"
               />
               <button class="add-step-btn" @click="addStep(goal.id)">
@@ -180,6 +179,7 @@
 import { ref, computed } from 'vue'
 import { useHabitsStore } from '../stores/habits'
 import { useScreenRefresh } from '../composables/useScreenRefresh'
+import { t } from '../i18n'
 import { Plus, Trash2, Check } from 'lucide-vue-next'
 
 const store = useHabitsStore()
@@ -248,12 +248,12 @@ function deadlineClass(goal) {
 }
 
 function formatDeadline(goal) {
-  if (goalProgress(goal) === 100) return 'выполнено!'
+  if (goalProgress(goal) === 100) return t('tasks.goalDone')
   const days = daysLeft(goal.deadline)
-  if (days < 0) return `просрочено на ${Math.abs(days)} дн.`
-  if (days === 0) return 'сегодня!'
-  if (days === 1) return 'завтра'
-  return `через ${days} дн.`
+  if (days < 0) return t('tasks.overdue', { n: Math.abs(days) })
+  if (days === 0) return t('tasks.dueToday')
+  if (days === 1) return t('tasks.dueTomorrow')
+  return t('tasks.dueIn', { n: days })
 }
 
 function formatDate(dateStr) {

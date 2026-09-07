@@ -1,11 +1,11 @@
 <template>
   <div class="timer-view">
-    <button class="back-btn" @click="router.back()">← Назад</button>
+    <button class="back-btn" @click="router.back()">{{ t('common.back') }}</button>
 
     <div class="habit-info">
       <span class="habit-emoji">{{ habit?.emoji }}</span>
       <h2 class="habit-name">{{ habit?.name }}</h2>
-      <p class="hint">Просто начни — можешь остановиться в любой момент</p>
+      <p class="hint">{{ t('timer.hint') }}</p>
     </div>
 
     <div class="circle-wrap">
@@ -29,12 +29,12 @@
     </div>
 
     <div class="actions">
-      <button v-if="!started" class="main-btn" @click="start">Старт</button>
-      <button v-else-if="running" class="main-btn pause" @click="pause">Пауза</button>
-      <button v-else class="main-btn" @click="resume">Продолжить</button>
+      <button v-if="!started" class="main-btn" @click="start">{{ t('timer.start') }}</button>
+      <button v-else-if="running" class="main-btn pause" @click="pause">{{ t('timer.pause') }}</button>
+      <button v-else class="main-btn" @click="resume">{{ t('timer.resume') }}</button>
 
-      <button class="secondary-btn" @click="postpone">Отложить на 10 мин</button>
-      <button class="skip-btn" @click="skip">Пропустить сегодня</button>
+      <button class="secondary-btn" @click="postpone">{{ t('timer.postpone') }}</button>
+      <button class="skip-btn" @click="skip">{{ t('timer.skipToday') }}</button>
     </div>
   </div>
 </template>
@@ -45,6 +45,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useHabitsStore } from '../stores/habits'
 import { supabase } from '../lib/supabase'
 import { logEvent } from '../composables/useAnalytics'
+import { t } from '../i18n'
 
 const router = useRouter()
 const route = useRoute()

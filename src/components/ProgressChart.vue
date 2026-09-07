@@ -5,6 +5,7 @@
 </template>
 
 <script setup>
+import { t } from '../i18n'
 import { ref, onMounted, onUnmounted } from 'vue'
 import {
   Chart,
@@ -73,7 +74,7 @@ onMounted(() => {
       labels: data.map((d) => d.label),
       datasets: [
         {
-          label: 'Привычки',
+          label: t('progress.chartLabel'),
           data: data.map((d) => d.completed),
           borderColor: '#f5f0e8',
           backgroundColor: 'rgba(245, 240, 232, 0.1)',

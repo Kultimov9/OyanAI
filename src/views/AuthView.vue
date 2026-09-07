@@ -3,7 +3,7 @@
     <img :src="logoUrl" class="logo" alt="Oyan" />
     <div class="auth-content">
       <p class="subtitle">
-        {{ showReset ? 'Восстановление пароля' : isLogin ? 'Войди в аккаунт' : 'Создай аккаунт' }}
+        {{ showReset ? t('auth.resetTitle') : isLogin ? t('auth.loginTitle') : t('auth.signupTitle') }}
       </p>
 
       <input v-model="email" type="email" class="input" placeholder="Email" autocomplete="email" />
@@ -12,7 +12,7 @@
         v-model="password"
         type="password"
         class="input"
-        placeholder="Пароль"
+        :placeholder="t('auth.passwordPlaceholder')"
         autocomplete="current-password"
       />
 
@@ -21,28 +21,29 @@
         class="forgot-btn"
         @click="openReset"
       >
-        Забыл пароль?
+        {{ t('auth.forgot') }}
       </button>
 
       <p v-if="error" class="error">{{ error }}</p>
       <p v-if="notice" class="notice">{{ notice }}</p>
 
       <button v-if="showReset" class="btn" @click="sendReset" :disabled="loading">
-        {{ loading ? 'Отправка...' : 'Отправить ссылку' }}
+        {{ loading ? t('auth.sending') : t('auth.sendLink') }}
       </button>
       <button v-else class="btn" @click="handleAuth" :disabled="loading">
-        {{ loading ? 'Загрузка...' : isLogin ? 'Войти' : 'Зарегистрироваться' }}
+        {{ loading ? t('auth.loading') : isLogin ? t('auth.login') : t('auth.signup') }}
       </button>
 
-      <button v-if="showReset" class="switch-btn" @click="closeReset">Назад ко входу</button>
+      <button v-if="showReset" class="switch-btn" @click="closeReset">{{ t('auth.backToLogin') }}</button>
       <button v-else class="switch-btn" @click="isLogin = !isLogin">
-        {{ isLogin ? 'Нет аккаунта? Создать' : 'Уже есть аккаунт? Войти' }}
+        {{ isLogin ? t('auth.noAccount') : t('auth.haveAccount') }}
       </button>
     </div>
   </div>
 </template>
 
 <script setup>
+import { t } from '../i18n'
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { supabase } from '../lib/supabase'
@@ -78,7 +79,7 @@ async function sendReset() {
   error.value = ''
   notice.value = ''
   if (!email.value) {
-    error.value = 'Введи email'
+    error.value = t('auth.needEmail')
     return
   }
   loading.value = true
@@ -87,9 +88,9 @@ async function sendReset() {
       redirectTo: 'https://oyan-app.netlify.app/reset-password',
     })
     if (resetError) throw resetError
-    notice.value = `Мы отправили ссылку для сброса пароля на ${email.value}. Проверь почту.`
+    notice.value = t('auth.resetSent', { email: email.value })
   } catch (e) {
-    error.value = e.message || 'Что-то пошло не так'
+    error.value = e.message || t('auth.generic')
   }
   loading.value = false
 }
@@ -98,7 +99,7 @@ async function handleAuth() {
   error.value = ''
   notice.value = ''
   if (!email.value || !password.value) {
-    error.value = 'Заполни email и пароль'
+    error.value = t('auth.needBoth')
     return
   }
 
@@ -120,7 +121,7 @@ async function handleAuth() {
 
       // Email уже зарегистрирован: Supabase скрывает это пустым списком identities.
       if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
-        error.value = 'Этот email уже зарегистрирован. Попробуй войти.'
+        error.value = t('auth.alreadyRegistered')
         loading.value = false
         return
       }
@@ -128,7 +129,7 @@ async function handleAuth() {
       // Нет сессии → включено подтверждение почты. Показываем сообщение и ждём,
       // пока пользователь подтвердит email по ссылке из письма.
       if (!data.session) {
-        notice.value = `Мы отправили письмо на ${email.value}. Подтверди почту по ссылке, затем войди.`
+        notice.value = t('auth.confirmSent', { email: email.value })
         password.value = ''
         isLogin.value = true
         loading.value = false
@@ -149,7 +150,7 @@ async function handleAuth() {
       router.replace('/onboarding')
     }
   } catch (e) {
-    error.value = e.message || 'Что-то пошло не так'
+    error.value = e.message || t('auth.generic')
   }
 
   loading.value = false

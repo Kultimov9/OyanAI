@@ -1,7 +1,7 @@
 <template>
   <div class="habits-view">
     <div class="page-header">
-      <h1 class="title">Привычки</h1>
+      <h1 class="title">{{ t('habits.title') }}</h1>
     </div>
     <div class="content">
       <div class="tabs">
@@ -10,14 +10,14 @@
           :class="{ active: activeTab === 'habits' }"
           @click="activeTab = 'habits'"
         >
-          Привычки
+          {{ t('habits.tabHabits') }}
         </button>
         <button
           class="tab"
           :class="{ active: activeTab === 'progress' }"
           @click="activeTab = 'progress'"
         >
-          Прогресс
+          {{ t('habits.tabProgress') }}
         </button>
       </div>
 
@@ -25,7 +25,7 @@
         <PairHabits />
 
         <div class="section">
-          <p class="section-label">Сегодня осталось</p>
+          <p class="section-label">{{ t('habits.todayLeft') }}</p>
           <div class="habit-list">
             <div
               v-for="habit in pendingHabits"
@@ -36,12 +36,12 @@
               <span class="emoji">{{ habit.emoji }}</span>
               <div class="info">
                 <p class="name">{{ habit.name }}</p>
-                <p class="duration">{{ habit.duration }} мин</p>
+                <p class="duration">{{ habit.duration }} {{ t('habits.minutes') }}</p>
               </div>
               <button
                 class="vis-btn"
                 :class="{ on: habit.isPublic }"
-                :title="habit.isPublic ? 'Видно друзьям' : 'Видно только тебе'"
+                :title="habit.isPublic ? t('habits.visiblePublic') : t('habits.visiblePrivate')"
                 @click.stop="toggleVisibility(habit)"
               >
                 <Eye v-if="habit.isPublic" :size="16" />
@@ -55,18 +55,18 @@
         </div>
 
         <div v-if="completedHabits.length > 0" class="section">
-          <p class="section-label">Сделано сегодня</p>
+          <p class="section-label">{{ t('habits.doneToday') }}</p>
           <div class="habit-list">
             <div v-for="habit in completedHabits" :key="habit.id" class="habit-card done">
               <span class="emoji">{{ habit.emoji }}</span>
               <div class="info">
                 <p class="name">{{ habit.name }}</p>
-                <p class="streak">🔥 {{ habit.streak }} дней подряд</p>
+                <p class="streak">{{ t('habits.streakDays', { n: habit.streak }) }}</p>
               </div>
               <button
                 class="vis-btn"
                 :class="{ on: habit.isPublic }"
-                :title="habit.isPublic ? 'Видно друзьям' : 'Видно только тебе'"
+                :title="habit.isPublic ? t('habits.visiblePublic') : t('habits.visiblePrivate')"
                 @click.stop="toggleVisibility(habit)"
               >
                 <Eye v-if="habit.isPublic" :size="16" />
@@ -80,7 +80,7 @@
         </div>
 
         <div class="section">
-          <p class="section-label">Добавить привычку</p>
+          <p class="section-label">{{ t('habits.addHabit') }}</p>
           <div class="add-form">
             <div class="form-row">
               <button
@@ -91,7 +91,7 @@
               >
                 {{ newEmoji }}
               </button>
-              <input v-model="newName" class="name-input" placeholder="Название" />
+              <input v-model="newName" class="name-input" :placeholder="t('habits.namePlaceholder')" />
             </div>
             <div v-if="showEmojiPicker" class="emoji-picker">
               <button
@@ -106,16 +106,16 @@
               </button>
             </div>
             <div class="form-row">
-              <label class="duration-label">Минут: {{ newDuration }}</label>
+              <label class="duration-label">{{ t('habits.minutesLabel', { n: newDuration }) }}</label>
               <input v-model="newDuration" type="range" min="1" max="60" class="slider" />
             </div>
             <div class="pair-toggle-row" @click="newIsPublic = !newIsPublic">
-              <span class="pair-toggle-label">Видно друзьям</span>
+              <span class="pair-toggle-label">{{ t('habits.visiblePublic') }}</span>
               <span class="pair-toggle" :class="{ on: newIsPublic }"><span class="knob" /></span>
             </div>
 
             <div class="pair-toggle-row" @click="pairMode = !pairMode">
-              <span class="pair-toggle-label">Парная привычка (с другом)</span>
+              <span class="pair-toggle-label">{{ t('habits.pairHabit') }}</span>
               <span class="pair-toggle" :class="{ on: pairMode }"><span class="knob" /></span>
             </div>
 
@@ -127,14 +127,14 @@
                   :class="{ on: pairSource === 'friends' }"
                   @click="pairSource = 'friends'"
                 >
-                  Из друзей
+                  {{ t('habits.fromFriends') }}
                 </button>
                 <button
                   class="src-btn"
                   :class="{ on: pairSource === 'code' }"
                   @click="pairSource = 'code'"
                 >
-                  По коду
+                  {{ t('habits.byCode') }}
                 </button>
               </div>
 
@@ -149,12 +149,12 @@
                     @click="selectedFriendId = f.other_id"
                   >
                     <span class="fc-av">{{ (f.username || '?').charAt(0).toUpperCase() }}</span>
-                    <span class="fc-name">{{ f.username || 'Друг' }}</span>
+                    <span class="fc-name">{{ f.username || t('habits.friend') }}</span>
                   </button>
                 </div>
                 <p v-else class="friend-empty">
-                  Нет друзей.
-                  <span class="friend-link" @click="router.push('/friends')">Найти на «Друзья»</span>
+                  {{ t('habits.noFriends') }}
+                  <span class="friend-link" @click="router.push('/friends')">{{ t('habits.findFriends') }}</span>
                 </p>
               </div>
             </template>
@@ -162,15 +162,15 @@
             <button class="add-btn" @click="addHabit">
               {{ pairBtnLabel }}
             </button>
-            <p v-if="pairSent" class="pair-sent">Приглашение отправлено 👍</p>
+            <p v-if="pairSent" class="pair-sent">{{ t('habits.inviteSent') }}</p>
           </div>
         </div>
 
         <div class="section">
-          <p class="section-label">Уведомления</p>
+          <p class="section-label">{{ t('habits.notifications') }}</p>
           <div class="notif-card">
             <div class="notif-row">
-              <span class="notif-label">🌅 Утреннее напоминание</span>
+              <span class="notif-label">{{ t('habits.morningReminder') }}</span>
               <select
                 class="time-select"
                 :value="store.notifications.morningHour"
@@ -180,7 +180,7 @@
               </select>
             </div>
             <div class="notif-row">
-              <span class="notif-label">🌙 Вечернее напоминание</span>
+              <span class="notif-label">{{ t('habits.eveningReminder') }}</span>
               <select
                 class="time-select"
                 :value="store.notifications.eveningHour"
@@ -197,29 +197,29 @@
         <div class="stats-grid">
           <div class="stat-card">
             <p class="stat-num">{{ totalCompleted }}</p>
-            <p class="stat-label">всего выполнено</p>
+            <p class="stat-label">{{ t('progress.totalDone') }}</p>
           </div>
           <div class="stat-card">
             <p class="stat-num">{{ bestStreak }}</p>
-            <p class="stat-label">лучший streak</p>
+            <p class="stat-label">{{ t('progress.bestStreak') }}</p>
           </div>
           <div class="stat-card">
             <p class="stat-num">{{ activeDays }}</p>
-            <p class="stat-label">активных дней</p>
+            <p class="stat-label">{{ t('progress.activeDays') }}</p>
           </div>
           <div class="stat-card">
             <p class="stat-num">{{ store.habits.length }}</p>
-            <p class="stat-label">привычек</p>
+            <p class="stat-label">{{ t('progress.habitsCount') }}</p>
           </div>
         </div>
 
         <div class="section">
-          <p class="section-label">График за 14 дней</p>
+          <p class="section-label">{{ t('habits.chart14') }}</p>
           <ProgressChart />
         </div>
 
         <div class="section">
-          <p class="section-label">Активность за 7 дней</p>
+          <p class="section-label">{{ t('progress.last7') }}</p>
           <div class="bar-chart">
             <div v-for="day in last7Days" :key="day.date" class="bar-col">
               <div class="bar-wrap">
@@ -235,7 +235,7 @@
         </div>
 
         <div class="section">
-          <p class="section-label">По привычкам</p>
+          <p class="section-label">{{ t('progress.byHabit') }}</p>
           <div class="habit-stats">
             <div v-for="habit in habitStats" :key="habit.id" class="habit-stat-card">
               <div class="habit-stat-top">
@@ -249,7 +249,7 @@
                   :style="{ width: habitProgress(habit.completedDates.length) }"
                 />
               </div>
-              <p class="habit-count">{{ habit.completedDates.length }} дней выполнено</p>
+              <p class="habit-count">{{ habit.completedDates.length }} {{ t('progress.daysDone') }}</p>
             </div>
           </div>
         </div>
@@ -257,11 +257,11 @@
 
       <div v-if="habitToDelete" class="modal-overlay" @click="habitToDelete = null">
         <div class="modal" @click.stop>
-          <p class="modal-title">Удалить привычку?</p>
-          <p class="modal-desc">«{{ habitToDelete.name }}» и весь прогресс будут удалены.</p>
+          <p class="modal-title">{{ t('habits.deleteTitle') }}</p>
+          <p class="modal-desc">{{ t('habits.deleteDesc', { name: habitToDelete.name }) }}</p>
           <div class="modal-actions">
-            <button class="modal-cancel" @click="habitToDelete = null">Отмена</button>
-            <button class="modal-confirm" @click="deleteHabit">Удалить</button>
+            <button class="modal-cancel" @click="habitToDelete = null">{{ t('common.cancel') }}</button>
+            <button class="modal-confirm" @click="deleteHabit">{{ t('common.delete') }}</button>
           </div>
         </div>
       </div>
@@ -269,13 +269,12 @@
       <!-- Пояснение при первом открытии привычки друзьям -->
       <div v-if="showVisibilityHint" class="modal-overlay" @click="showVisibilityHint = false">
         <div class="modal" @click.stop>
-          <p class="modal-title">Видно друзьям</p>
+          <p class="modal-title">{{ t('habits.visibilityHintTitle') }}</p>
           <p class="modal-desc">
-            Друзья увидят эту привычку и твой прогресс по ней. Остальные привычки, задачи,
-            цели и рефлексии остаются только твоими.
+            {{ t('habits.visibilityHintDesc') }}
           </p>
           <div class="modal-actions">
-            <button class="modal-confirm alt" @click="showVisibilityHint = false">Понятно</button>
+            <button class="modal-confirm alt" @click="showVisibilityHint = false">{{ t('habits.gotIt') }}</button>
           </div>
         </div>
       </div>
@@ -283,16 +282,16 @@
       <!-- Модалка приглашения после создания парной привычки -->
       <div v-if="inviteCode" class="modal-overlay" @click="closeInvite">
         <div class="modal" @click.stop>
-          <p class="modal-title">Парная привычка создана</p>
+          <p class="modal-title">{{ t('habits.pairCreated') }}</p>
           <p class="modal-desc">
-            Отправь другу ссылку. Как примет — увидите прогресс друг друга каждый день.
+            {{ t('habits.pairCreatedDesc') }}
           </p>
           <div class="invite-link">{{ inviteLinkText }}</div>
           <div class="modal-actions">
-            <button class="modal-cancel" @click="copyCode">Скопировать код</button>
-            <button class="modal-confirm alt" @click="doShare">Поделиться</button>
+            <button class="modal-cancel" @click="copyCode">{{ t('habits.copyCode') }}</button>
+            <button class="modal-confirm alt" @click="doShare">{{ t('habits.share') }}</button>
           </div>
-          <p v-if="copied" class="copied-hint">Скопировано в буфер</p>
+          <p v-if="copied" class="copied-hint">{{ t('habits.copied') }}</p>
         </div>
       </div>
     </div>
@@ -308,6 +307,7 @@ import { useFriendsStore } from '../stores/friends'
 import { setupNotifications } from '../composables/useNotifications'
 import { shareInvite, copyText, inviteLink } from '../composables/share'
 import { pendingPairFriend } from '../composables/uiState'
+import { t } from '../i18n'
 import { useScreenRefresh } from '../composables/useScreenRefresh'
 import { Trash2, Eye, Lock } from 'lucide-vue-next'
 import ProgressChart from '../components/ProgressChart.vue'
@@ -329,8 +329,8 @@ const copied = ref(false)
 const inviteLinkText = computed(() => (inviteCode.value ? inviteLink(inviteCode.value) : ''))
 
 const pairBtnLabel = computed(() => {
-  if (!pairMode.value) return 'Добавить'
-  return pairSource.value === 'code' ? 'Создать и позвать по коду' : 'Пригласить друга'
+  if (!pairMode.value) return t('habits.add')
+  return pairSource.value === 'code' ? t('habits.createByCode') : t('habits.inviteFriend')
 })
 
 // Обновление при каждом входе на экран, а не только при первом монтировании.
@@ -460,7 +460,7 @@ const bestStreak = computed(() => Math.max(0, ...store.habits.map((h) => h.strea
 const activeDays = computed(() => new Set(store.habits.flatMap((h) => h.completedDates)).size)
 
 const last7Days = computed(() => {
-  const labels = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб']
+  const labels = t('progress.weekdays')
   return Array.from({ length: 7 }, (_, i) => {
     const d = new Date()
     d.setDate(d.getDate() - (6 - i))

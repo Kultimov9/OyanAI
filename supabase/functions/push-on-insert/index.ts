@@ -4,6 +4,7 @@
 // Деплоится с --no-verify-jwt, доступ закрыт заголовком x-push-secret.
 
 import { admin, nickOf, sendPush, checkSecret, json } from '../_shared/push.ts'
+import { dict, fill, langOf } from '../_shared/i18n.ts'
 
 type Hook = {
   type: string
@@ -32,30 +33,20 @@ Deno.serve(async (req) => {
   let body = ''
   let screen = ''
 
+  // Получателя определяем до текста: язык берётся из его профиля.
   if (hook.table === 'nudges') {
     to = r.to_user
     from = r.from_user
-    const { data: pair } = await db
-      .from('habit_pairs')
-      .select('habit_name')
-      .eq('id', r.pair_id)
-      .maybeSingle()
-    body = `${await nickOf(db, from!)} зовёт сделать ${pair?.habit_name || 'привычку'} прямо сейчас`
-    screen = 'pair'
   } else if (hook.table === 'friendships') {
     // Пуш только на новую заявку; accepted/declined приходят через update.
     if (r.status !== 'pending') return json({ skipped: 'not_pending' })
     to = r.addressee_id
     from = r.requester_id
-    body = `${await nickOf(db, from!)} хочет добавить тебя в друзья`
-    screen = 'friends'
   } else if (hook.table === 'habit_pairs') {
     // Пара без invited_user — это приглашение по коду, адресата ещё нет.
     if (!r.invited_user) return json({ skipped: 'no_invited_user' })
     to = r.invited_user
     from = r.creator_id
-    body = `${await nickOf(db, from!)} зовёт делать ${r.habit_name || 'привычку'} вместе`
-    screen = 'pair'
   } else {
     return json({ skipped: 'unknown_table', table: hook.table })
   }
@@ -63,6 +54,26 @@ Deno.serve(async (req) => {
   if (!to || !from) return json({ skipped: 'no_recipient' })
   // Самому себе не шлём (например, тест-вставка руками).
   if (to === from) return json({ skipped: 'self' })
+
+  // Пишем на языке ПОЛУЧАТЕЛЯ, а не отправителя.
+  const d = dict(await langOf(db, to))
+  const nick = (await nickOf(db, from)) || d.friendFallback
+
+  if (hook.table === 'nudges') {
+    const { data: pair } = await db
+      .from('habit_pairs')
+      .select('habit_name')
+      .eq('id', r.pair_id)
+      .maybeSingle()
+    body = fill(d.nudge, { nick, habit: pair?.habit_name || d.habitFallback })
+    screen = 'pair'
+  } else if (hook.table === 'friendships') {
+    body = fill(d.friendRequest, { nick })
+    screen = 'friends'
+  } else {
+    body = fill(d.pairInvite, { nick, habit: r.habit_name || d.habitFallback })
+    screen = 'pair'
+  }
 
   const res = await sendPush({
     user_id: to,

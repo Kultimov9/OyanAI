@@ -1,6 +1,6 @@
 <template>
   <div class="heatmap">
-    <p class="heatmap-label">Активность за последние 30 дней</p>
+    <p class="heatmap-label">{{ t('progress.heatmapLabel') }}</p>
     <div class="grid">
       <div
         v-for="day in days"
@@ -11,12 +11,12 @@
       />
     </div>
     <div class="legend">
-      <span class="legend-label">меньше</span>
+      <span class="legend-label">{{ t('progress.less') }}</span>
       <div class="cell legend-cell c0" />
       <div class="cell legend-cell c1" />
       <div class="cell legend-cell c2" />
       <div class="cell legend-cell c3" />
-      <span class="legend-label">больше</span>
+      <span class="legend-label">{{ t('progress.more') }}</span>
     </div>
   </div>
 </template>
@@ -24,6 +24,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useHabitsStore } from '../stores/habits'
+import { t } from '../i18n'
 
 const store = useHabitsStore()
 

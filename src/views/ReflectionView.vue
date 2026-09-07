@@ -1,12 +1,12 @@
 <template>
   <div class="reflection-view">
     <div class="page-header">
-      <h1 class="title">Как прошёл день?</h1>
-      <p class="subtitle">Это займёт 30 секунд</p>
+      <h1 class="title">{{ t('reflection.title') }}</h1>
+      <p class="subtitle">{{ t('reflection.subtitle') }}</p>
     </div>
     <div class="content">
       <div class="section">
-        <p class="section-label">Настроение</p>
+        <p class="section-label">{{ t('reflection.mood') }}</p>
         <div class="mood-row">
           <button
             v-for="mood in moods"
@@ -21,7 +21,7 @@
       </div>
 
       <div class="section">
-        <p class="section-label">Что мешало сегодня?</p>
+        <p class="section-label">{{ t('reflection.obstaclesLabel') }}</p>
         <div class="obstacle-list">
           <button
             v-for="obstacle in obstacles"
@@ -36,11 +36,11 @@
       </div>
 
       <div class="section">
-        <p class="section-label">Заметка (необязательно)</p>
+        <p class="section-label">{{ t('reflection.noteLabel') }}</p>
         <textarea
           v-model="note"
           class="note-input"
-          placeholder="Что угодно о сегодняшнем дне..."
+          :placeholder="t('reflection.notePlaceholder')"
           rows="3"
         />
       </div>
@@ -48,26 +48,26 @@
       <div class="stats">
         <div class="stat-card">
           <p class="stat-num">{{ completedToday }}</p>
-          <p class="stat-label">сделано сегодня</p>
+          <p class="stat-label">{{ t('reflection.doneToday') }}</p>
         </div>
         <div class="stat-card">
           <p class="stat-num">{{ bestStreak }}</p>
-          <p class="stat-label">лучший streak</p>
+          <p class="stat-label">{{ t('reflection.bestStreak') }}</p>
         </div>
         <div class="stat-card">
           <p class="stat-num">{{ totalDays }}</p>
-          <p class="stat-label">дней в приложении</p>
+          <p class="stat-label">{{ t('reflection.daysInApp') }}</p>
         </div>
       </div>
 
-      <div v-if="saved" class="success-banner">✅ Рефлексия сохранена!</div>
+      <div v-if="saved" class="success-banner">{{ t('reflection.savedBanner') }}</div>
 
       <button class="save-btn" @click="save" :disabled="saved">
-        {{ saved ? 'Сохранено ✓' : 'Сохранить' }}
+        {{ saved ? t('reflection.savedBtn') : t('common.save') }}
       </button>
 
       <div v-if="pastReflections.length > 0" class="section">
-        <p class="section-label">История</p>
+        <p class="section-label">{{ t('reflection.history') }}</p>
         <div class="history-list">
           <div v-for="r in pastReflections" :key="r.date" class="history-card">
             <div class="history-top">
@@ -86,6 +86,7 @@
 </template>
 
 <script setup>
+import { t } from '../i18n'
 import { ref, computed } from 'vue'
 // import { useRouter } from 'vue-router'
 import { useHabitsStore } from '../stores/habits'
@@ -100,13 +101,8 @@ const moods = [
   { emoji: '💪', value: 'great' },
 ]
 
-const obstacles = [
-  'Не было сил',
-  'Отвлёкся на телефон',
-  'Не было времени',
-  'Забыл',
-  'Не было настроения',
-]
+// computed: при смене языка список должен перерисоваться.
+const obstacles = computed(() => t('reflection.obstacles'))
 
 const today = new Date().toISOString().split('T')[0]
 const existing = store.reflections.find((r) => r.date === today)

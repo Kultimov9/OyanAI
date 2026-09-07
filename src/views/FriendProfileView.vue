@@ -1,16 +1,16 @@
 <template>
   <div class="friend-profile">
     <div class="page-header">
-      <button class="back-btn" @click="router.back()">← Назад</button>
+      <button class="back-btn" @click="router.back()">{{ t('common.back') }}</button>
       <span />
       <span />
     </div>
 
-    <div v-if="loading" class="state">Загружаем…</div>
+    <div v-if="loading" class="state">{{ t('friendProfile.loading') }}</div>
 
     <div v-else-if="error" class="state">
       <p>{{ error }}</p>
-      <button class="ghost-btn" @click="load">Повторить</button>
+      <button class="ghost-btn" @click="load">{{ t('friendProfile.retry') }}</button>
     </div>
 
     <div v-else-if="data" class="content">
@@ -21,28 +21,28 @@
           <span v-else>{{ initial }}</span>
         </span>
         <p class="nick">{{ nick }}</p>
-        <p class="joined">с нами с {{ joined }}</p>
+        <p class="joined">{{ t('friendProfile.joined', { date: joined }) }}</p>
       </div>
 
       <!-- Статистика -->
       <div class="stats">
         <div class="stat">
           <span class="stat-num">{{ data.stats.total_completions }}</span>
-          <span class="stat-label">всего выполнений</span>
+          <span class="stat-label">{{ t('friendProfile.totalCompletions') }}</span>
         </div>
         <div class="stat">
           <span class="stat-num">{{ data.stats.best_streak }}</span>
-          <span class="stat-label">лучший streak</span>
+          <span class="stat-label">{{ t('friendProfile.bestStreak') }}</span>
         </div>
         <div class="stat">
           <span class="stat-num">{{ data.stats.active_days_30 }}</span>
-          <span class="stat-label">активных дней за 30</span>
+          <span class="stat-label">{{ t('friendProfile.activeDays30') }}</span>
         </div>
       </div>
 
       <!-- Хитмап -->
       <div v-if="hasPublicHabits" class="section">
-        <p class="section-label">Активность за 30 дней</p>
+        <p class="section-label">{{ t('friendProfile.activity30') }}</p>
         <div class="heat">
           <span
             v-for="d in heatDays"
@@ -56,7 +56,7 @@
 
       <!-- Общие привычки -->
       <div v-if="data.pairs.length" class="section">
-        <p class="section-label">Общие привычки</p>
+        <p class="section-label">{{ t('friendProfile.sharedHabits') }}</p>
         <div class="cards">
           <div v-for="p in data.pairs" :key="p.id" class="card pair-card">
             <div class="card-head">
@@ -64,7 +64,7 @@
               <span class="card-name">{{ p.habit_name }}</span>
             </div>
             <div class="pair-status">
-              <span class="who">Ты</span>
+              <span class="who">{{ t('friendProfile.you') }}</span>
               <span class="dot" :class="{ done: pairDone(p, myId) }" />
               <span class="who right">{{ nick }}</span>
               <span class="dot" :class="{ done: pairDone(p, friendId) }" />
@@ -75,7 +75,7 @@
 
       <!-- Привычки друга -->
       <div class="section">
-        <p class="section-label">Привычки</p>
+        <p class="section-label">{{ t('friendProfile.habits') }}</p>
 
         <div v-if="hasPublicHabits" class="cards">
           <div v-for="h in data.habits" :key="h.id" class="card">
@@ -99,11 +99,11 @@
 
         <div v-else class="empty">
           <Lock :size="22" />
-          <p>{{ nick }} пока не открыл свои привычки</p>
+          <p>{{ t('friendProfile.emptyHabits', { nick }) }}</p>
         </div>
       </div>
 
-      <button class="invite-btn" @click="inviteToPair">Позвать делать вместе</button>
+      <button class="invite-btn" @click="inviteToPair">{{ t('friendProfile.inviteTogether') }}</button>
     </div>
   </div>
 </template>
@@ -115,6 +115,7 @@ import { Lock } from 'lucide-vue-next'
 import { supabase } from '../lib/supabase'
 import { logEvent } from '../composables/useAnalytics'
 import { pendingPairFriend } from '../composables/uiState'
+import { t } from '../i18n'
 
 const route = useRoute()
 const router = useRouter()
@@ -127,21 +128,16 @@ const myId = ref(null)
 
 const todayStr = () => new Date().toISOString().split('T')[0]
 
-const nick = computed(() => data.value?.username || 'Друг')
+const nick = computed(() => data.value?.username || t('friendProfile.friend'))
 const initial = computed(() => nick.value.charAt(0).toUpperCase())
 
 // toLocaleDateString даёт именительный падеж («с нами с март 2026 г.»),
 // поэтому месяцы берём в родительном.
-const MONTHS = [
-  'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
-  'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
-]
-
 const joined = computed(() => {
   const raw = data.value?.joined_at
   if (!raw) return '—'
   const d = new Date(raw)
-  return `${MONTHS[d.getMonth()]} ${d.getFullYear()}`
+  return `${t('friendProfile.months')[d.getMonth()]} ${d.getFullYear()}`
 })
 
 const hasPublicHabits = computed(() => (data.value?.habits?.length || 0) > 0)
@@ -213,8 +209,8 @@ async function load() {
     // Отдельно разбираем отказ по дружбе: он ожидаемый, а не сбой.
     const msg = e?.message || String(e)
     error.value = /not friends/i.test(msg)
-      ? 'Профиль доступен только друзьям.'
-      : 'Не удалось загрузить профиль.'
+      ? t('friendProfile.onlyFriends')
+      : t('friendProfile.loadFailed')
     console.log('get_friend_profile error:', e)
   } finally {
     loading.value = false

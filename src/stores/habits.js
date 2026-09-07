@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { supabase } from '../lib/supabase'
 import { logEvent } from '../composables/useAnalytics'
+import { t, applyProfileLocale } from '../i18n'
 import { useFriendsStore } from './friends'
 import { usePairsStore } from './pairs'
 
@@ -123,6 +124,9 @@ export const useHabitsStore = defineStore('habits', {
       this.username = profileRes.data?.username || null
       this.avatarUrl = profileRes.data?.avatar_url || null
       this.email = user.email || null
+      // Язык из профиля — чтобы после переустановки или на втором устройстве
+      // интерфейс открылся на том же языке. Ручной выбор на устройстве важнее.
+      applyProfileLocale(profileRes.data?.lang)
 
       // Парные привычки — грузим отдельным стором, не блокируя роутинг.
       import('./pairs')
@@ -199,12 +203,12 @@ export const useHabitsStore = defineStore('habits', {
     async updateUsername(name) {
       const clean = (name || '').trim().toLowerCase()
       if (!/^[a-z0-9_]{3,20}$/.test(clean)) {
-        return { ok: false, error: '3–20 символов: латиница, цифры, _' }
+        return { ok: false, error: t('profile.nicknameHint') }
       }
       const { error } = await supabase.from('profiles').upsert({ id: this.userId, username: clean })
       if (error) {
-        if (error.code === '23505') return { ok: false, error: 'Ник занят' }
-        return { ok: false, error: error.message || 'Не удалось сохранить' }
+        if (error.code === '23505') return { ok: false, error: t('profile.nicknameTaken') }
+        return { ok: false, error: error.message || t('profile.saveFailed') }
       }
       this.username = clean
       logEvent('username_updated', {})

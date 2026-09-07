@@ -1,0 +1,705 @@
+import { ref } from 'vue'
+
+// Локализация без внешних зависимостей: t() читает locale внутри рендера,
+// поэтому Vue сам отслеживает зависимость и перерисовывает текст при смене
+// языка — перезагрузка не нужна.
+//
+// Третий язык добавляется одним объектом в messages: ключи те же.
+
+const STORAGE_KEY = 'oyan-lang'
+
+export const LOCALES = [
+  { code: 'kk', label: 'Қазақша' },
+  { code: 'ru', label: 'Русский' },
+]
+
+export const messages = {
+  kk: {
+    nav: {
+      home: 'Басты бет',
+      tasks: 'Тапсырмалар',
+      habits: 'Әдеттер',
+      ai: 'AI',
+      reflection: 'Рефлексия',
+    },
+    common: {
+      back: '← Артқа',
+      save: 'Сақтау',
+      saved: 'Сақталды',
+      cancel: 'Болдырмау',
+      delete: 'Жою',
+    },
+    profile: {
+      title: 'Профиль',
+      changePhoto: 'Өзгерту',
+      nickname: 'Лақап ат',
+      nicknamePlaceholder: 'лақап ат',
+      nicknameHint: '3–20 таңба: латын әрпі, сан, _',
+      nicknameTaken: 'Бұл лақап ат бос емес',
+      saveFailed: 'Сақтау мүмкін болмады',
+      language: 'Тіл',
+      friends: 'Достар',
+      logout: 'Аккаунттан шығу',
+    },
+
+    home: {
+      greetMorning: 'Қайырлы таң',
+      greetDay: 'Қайырлы күн',
+      greetEvening: 'Қайырлы кеш',
+      addFirstHabit: 'Алғашқы әдетті қосу',
+      startMinutes: '{n} минут бастау →',
+      notNow: 'Қазір емес',
+      remindEvening: 'Қазір емес — кешке еске сал',
+      caseWord: ['іс'],
+      todayLeft: 'Бүгін {n} {word}.',
+      startSmall: 'Кішіден баста.',
+      allDone: 'Бәрі орындалды! 🎉',
+      wellDone: 'Жарайсың.',
+      welcome: 'Қош келдің.',
+      pathBegins: 'Жолың басталды.',
+      startNow: 'Дәл қазір бастау',
+      doneToday: 'Бүгін орындалды',
+      dayShort: 'күн',
+      allHabits: 'Барлық әдеттер',
+      compareLabel: '📅 Кешегімен салыстыру',
+      yesterday: 'Кеше',
+      today: 'Бүгін',
+      challengeLabel: '⚡ Өзіңе сын',
+      challengeText: 'Апта бұрын {done}/{total} әдетті орындағансың. Қайталай аласың ба?',
+      challengeSub: 'Бүгін: {done}/{total}',
+      yesterdayNone: 'Кеше бірде-бір әдет орындалмады — бүгін бастаудың кезі 💪',
+      yesterdayBetter: 'Кешегіден жақсы. Кеше {done}/{total} болатын 🔥',
+      yesterdaySame: 'Кешегі қарқындасың ({done}/{total}) ✅',
+      yesterdayWorse: 'Кеше {done}/{total} жасадың — бүгін көбірек бола ма?',
+      aiPlaceholder: 'Бүгін неден бастаймыз? Бес минут та — қадам.',
+      aiPlaceholderNoHabits: 'Неден бастаймыз? Бір шағын қадам да маңызды.',
+      profileFallback: 'Профиль',
+      remindAt: 'Жақсы, {time} еске саламын.',
+    },
+    habits: {
+      title: 'Әдеттер',
+      tabHabits: 'Әдеттер',
+      tabProgress: 'Прогресс',
+      todayLeft: 'Бүгін қалды',
+      doneToday: 'Бүгін орындалды',
+      minutes: 'мин',
+      streakDays: '🔥 {n} күн қатарынан',
+      visiblePublic: 'Достарға көрінеді',
+      visiblePrivate: 'Тек саған көрінеді',
+      addHabit: 'Әдет қосу',
+      namePlaceholder: 'Атауы',
+      minutesLabel: 'Минут: {n}',
+      pairHabit: 'Жұптық әдет (доспен)',
+      fromFriends: 'Достардан',
+      byCode: 'Код арқылы',
+      friend: 'Дос',
+      noFriends: 'Достар жоқ.',
+      findFriends: '«Достар» бетінен табу',
+      add: 'Қосу',
+      createByCode: 'Құрып, код арқылы шақыру',
+      inviteFriend: 'Досты шақыру',
+      inviteSent: 'Шақыру жіберілді 👍',
+      notifications: 'Хабарламалар',
+      morningReminder: '🌅 Таңғы еске салу',
+      eveningReminder: '🌙 Кешкі еске салу',
+      chart14: '14 күндік график',
+      deleteTitle: 'Әдетті жою?',
+      deleteDesc: '«{name}» және барлық прогресс жойылады.',
+      visibilityHintTitle: 'Достарға көрінеді',
+      visibilityHintDesc:
+        'Достар осы әдетті және ондағы прогресіңді көреді. Қалған әдеттер, тапсырмалар, мақсаттар мен рефлексиялар тек сенікі болып қалады.',
+      gotIt: 'Түсінікті',
+      pairCreated: 'Жұптық әдет құрылды',
+      pairCreatedDesc:
+        'Досыңа сілтеме жібер. Ол қабылдаған соң күн сайын бір-біріңнің прогресіңді көресіңдер.',
+      copyCode: 'Кодты көшіру',
+      share: 'Бөлісу',
+      copied: 'Буферге көшірілді',
+    },
+    tasks: {
+      tabTasks: 'Тапсырмалар',
+      tabGoals: 'Мақсаттар',
+      title: 'Бүгінгі тапсырмалар',
+      subtitle: '{done}/{total} орындалды',
+      addPlaceholder: 'Тапсырма қосу...',
+      left: 'Қалды',
+      done: 'Дайын',
+      emptyTitle: 'Күн таза',
+      emptyText: 'Алғашқы тапсырманы қос — бір шағын іс те алға жылжу',
+      allDone: '🎉 Барлық тапсырма орындалды!',
+      goalsTitle: 'Жақын мақсаттар',
+      goalsSubtitle: '{done}/{total} орындалды',
+      goalPlaceholder: 'Мақсат атауы...',
+      deadline: 'Орындау мерзімі',
+      emptyGoals: 'Алғашқы мақсатты қос',
+      addStep: 'Қадам қосу...',
+      goalDone: 'орындалды!',
+      overdue: '{n} күнге кешікті',
+      dueToday: 'бүгін!',
+      dueTomorrow: 'ертең',
+      dueIn: '{n} күннен кейін',
+    },
+    reflection: {
+      title: 'Күнің қалай өтті?',
+      subtitle: '30 секунд алады',
+      mood: 'Көңіл күй',
+      obstaclesLabel: 'Бүгін не кедергі болды?',
+      obstacles: ['Күш болмады', 'Телефонға алаңдадым', 'Уақыт болмады', 'Ұмыттым', 'Көңіл күй болмады'],
+      noteLabel: 'Жазба (міндетті емес)',
+      notePlaceholder: 'Бүгінгі күн туралы кез келген нәрсе...',
+      doneToday: 'бүгін орындалды',
+      bestStreak: 'ең үздік серия',
+      daysInApp: 'қосымшадағы күн',
+      savedBanner: '✅ Рефлексия сақталды!',
+      savedBtn: 'Сақталды ✓',
+      history: 'Тарих',
+    },
+    ai: {
+      title: 'AI көмекші',
+      subtitle: 'Әдеттерің мен тапсырмаларыңды біледі',
+      empty: 'Сәлем! Әдеттерің мен тапсырмаларыңды білемін. Кез келген нәрсені сұра.',
+      typing: 'ойланып жатырмын...',
+      inputPlaceholder: 'Хабарлама жаз...',
+      error: 'Бірдеңе дұрыс болмады. Интернет байланысын тексер.',
+      suggestionsFirst: [
+        'Бүгін қалай жүріп жатырмын?',
+        'Дәл қазір не істеуім керек?',
+        'Кешеден қандай тапсырма қалды?',
+        'Істі кейінге қалдырмау туралы кеңес бер',
+      ],
+      suggestionsMore: [
+        'Тағы не істеуім керек?',
+        'Мотивация бер',
+        'Мақсаттарым қалай?',
+        'Қазір не маңыздырақ?',
+      ],
+    },
+    friends: {
+      title: 'Достар',
+      requests: 'Сұраныстар',
+      noNick: 'Лақап атсыз',
+      accept: 'Қабылдау',
+      decline: 'Бас тарту',
+      myFriends: 'Менің достарым',
+      createShared: 'Ортақ әдет құру',
+      removeFriend: 'Достардан шығару',
+      emptyFriends: 'Әзірше дос жоқ — төменнен лақап ат бойынша тап немесе досыңа әдеттің шақыру кодын жібер.',
+      searchLabel: 'Лақап ат немесе пошта бойынша іздеу',
+      searchPlaceholder: 'Лақап ат немесе пошта',
+      noNickYet: 'лақап ат әлі қойылмаған',
+      notFound: '«{q}» бойынша ешкім табылмады',
+      emailHint: 'Досың лақап ат қоймаған болса — поштасын толық жазып тап.',
+      addFriend: 'Қосу',
+      requestSent: 'Сұраныс жіберілді',
+      alreadyFriends: 'Достарыңда',
+      removeTitle: 'Достардан шығару?',
+      thisUser: 'Бұл қолданушы',
+      removeDesc: 'сенің достар тізімнен жоғалады, сен де оның тізімінен. Ортақ әдеттер қалады: оларды бөлек жою керек. Кейін қайта қоса аласыңдар.',
+      removing: 'Жойылуда…',
+    },
+    friendProfile: {
+      loading: 'Жүктелуде…',
+      retry: 'Қайталау',
+      loadFailed: 'Профильді жүктеу мүмкін болмады.',
+      onlyFriends: 'Профиль тек достарға қолжетімді.',
+      joined: 'бізбен {date} бастап',
+      totalCompletions: 'барлық орындау',
+      bestStreak: 'ең үздік серия',
+      activeDays30: '30 күндегі белсенді күн',
+      activity30: '30 күндегі белсенділік',
+      sharedHabits: 'Ортақ әдеттер',
+      habits: 'Әдеттер',
+      you: 'Сен',
+      friend: 'Дос',
+      emptyHabits: '{nick} әзірше әдеттерін ашпаған',
+      inviteTogether: 'Бірге жасауға шақыру',
+      months: ['қаңтар', 'ақпан', 'наурыз', 'сәуір', 'мамыр', 'маусым', 'шілде', 'тамыз', 'қыркүйек', 'қазан', 'қараша', 'желтоқсан'],
+    },
+    pairs: {
+      title: 'Жұптық әдеттер',
+      inviteText: '{nick} сені «{habit}» әдетін бірге жасауға шақырады',
+      accept: 'Қабылдау',
+      decline: 'Бас тарту',
+      dayWord: ['күн'],
+      streakTogether: '🔥 {n} {word} бірге',
+      finish: 'Аяқтау',
+      you: 'Сен',
+      markDone: 'Жасағанымды белгілеу',
+      me: 'Мен',
+      nudge: 'Түрткі салу 👊',
+      alreadyNudged: 'түрткі салынды',
+      remove: 'Алып тастау',
+      share: 'Бөлісу',
+      endTitle: 'Жұптық әдетті аяқтау?',
+      endDesc: '«{habit}» екеуіңде де аяқталады. Жалғастыру мүмкін болмайды.',
+      end: 'Аяқтау',
+      haveCode: 'Менде досымның коды бар',
+      codePlaceholder: 'Достың коды',
+      joined: 'Дайын — сендер жұптасыңдар',
+      statusEnded: 'Жұп аяқталды',
+      statusPending: 'досты күтудеміз',
+      statusBothToday: 'Екеуің де бүгін жасадың',
+      statusStreak: '{n} {word} қатарынан бірге',
+      statusYouDone: 'Сен жасадың. Досты күтудеміз',
+      statusFriendDone: 'Досың жасады. Сенің кезегің',
+      statusNone: 'Бүгін жасаған соң белгіле',
+    },
+    toast: {
+      nudgeTitle: '{nick} түрткі салып жатыр',
+      nudgeSub: '«{habit}» әдетін дәл қазір жаса',
+      start: 'Бастау',
+      open: 'Ашу',
+    },
+    auth: {
+      resetTitle: 'Құпия сөзді қалпына келтіру',
+      loginTitle: 'Аккаунтқа кір',
+      signupTitle: 'Аккаунт құр',
+      passwordPlaceholder: 'Құпия сөз',
+      forgot: 'Құпия сөзді ұмыттың ба?',
+      sending: 'Жіберілуде...',
+      sendLink: 'Сілтеме жіберу',
+      loading: 'Жүктелуде...',
+      login: 'Кіру',
+      signup: 'Тіркелу',
+      backToLogin: 'Кіруге оралу',
+      noAccount: 'Аккаунт жоқ па? Құру',
+      haveAccount: 'Аккаунт бар ма? Кіру',
+      needEmail: 'Email енгіз',
+      needBoth: 'Email мен құпия сөзді толтыр',
+      resetSent: '{email} мекенжайына құпия сөзді қалпына келтіру сілтемесін жібердік. Поштаңды тексер.',
+      alreadyRegistered: 'Бұл email тіркелген. Кіріп көр.',
+      confirmSent: '{email} мекенжайына хат жібердік. Сілтеме арқылы поштаңды растап, содан соң кір.',
+      generic: 'Бірдеңе дұрыс болмады',
+    },
+    onboarding: {
+      title1: 'Кішіден баста',
+      desc1: 'Бәрін бірден өзгертудің қажеті жоқ. Күніне бір шағын әрекет — бір айдан соң өзіңді танымай қаласың.',
+      next: 'Әрі қарай',
+      title2: 'Кедергі — нөл',
+      desc2: 'Бір түймені бастың — бастадың деген сөз. Бір минуттан соң тоқтай аласың. Ең бастысы — бастау.',
+      title3: 'Әдеттерді таңда',
+      desc3: 'Неден бастайтыныңды таңда. Кейін өзіңдікін қосуға болады.',
+      minutes: 'мин',
+      pickAtLeastOne: 'Кемінде бір әдетті таңда',
+      start: 'Бастау →',
+      skip: 'Өткізу — кейін реттеймін',
+      presets: ['Жүгіру', 'Су ішу', 'Күн жазбасы', 'Медитация', 'Оқу', 'Жаттығу', 'Серуен', 'Ұйқы режимі'],
+    },
+    timer: {
+      hint: 'Жай ғана баста — кез келген сәтте тоқтай аласың',
+      start: 'Бастау',
+      pause: 'Кідірту',
+      resume: 'Жалғастыру',
+      postpone: '10 минутқа қалдыру',
+      skipToday: 'Бүгін өткізу',
+    },
+    progress: {
+      title: 'Прогресс',
+      totalDone: 'барлығы орындалды',
+      bestStreak: 'ең үздік серия',
+      activeDays: 'белсенді күн',
+      habitsCount: 'әдет',
+      last7: '7 күндегі белсенділік',
+      byHabit: 'Әдеттер бойынша',
+      daysDone: 'күн орындалды',
+      weekdays: ['Жк', 'Дс', 'Сс', 'Ср', 'Бс', 'Жм', 'Сн'],
+      chartLabel: 'Әдеттер',
+      heatmapLabel: 'Соңғы 30 күндегі белсенділік',
+      less: 'азырақ',
+      more: 'көбірек',
+    },
+  },
+
+  ru: {
+    nav: {
+      home: 'Главная',
+      tasks: 'Задачи',
+      habits: 'Привычки',
+      ai: 'AI',
+      reflection: 'Рефлексия',
+    },
+    common: {
+      back: '← Назад',
+      save: 'Сохранить',
+      saved: 'Сохранено',
+      cancel: 'Отмена',
+      delete: 'Удалить',
+    },
+    profile: {
+      title: 'Профиль',
+      changePhoto: 'Изменить фото',
+      nickname: 'Никнейм',
+      nicknamePlaceholder: 'никнейм',
+      nicknameHint: '3–20 символов: латиница, цифры, _',
+      nicknameTaken: 'Ник занят',
+      saveFailed: 'Не удалось сохранить',
+      language: 'Язык',
+      friends: 'Друзья',
+      logout: 'Выйти из аккаунта',
+    },
+
+    home: {
+      greetMorning: 'Доброе утро',
+      greetDay: 'Добрый день',
+      greetEvening: 'Добрый вечер',
+      addFirstHabit: 'Добавить первую привычку',
+      startMinutes: 'Начать {n} минут →',
+      notNow: 'Не сейчас',
+      remindEvening: 'Не сейчас — напомни вечером',
+      caseWord: ['дело', 'дела', 'дел'],
+      todayLeft: 'Сегодня {n} {word}.',
+      startSmall: 'Начни с малого.',
+      allDone: 'Всё сделано! 🎉',
+      wellDone: 'Ты молодец.',
+      welcome: 'Добро пожаловать.',
+      pathBegins: 'Твой путь начинается.',
+      startNow: 'Начать прямо сейчас',
+      doneToday: 'Уже сделано сегодня',
+      dayShort: 'дн.',
+      allHabits: 'Все привычки',
+      compareLabel: '📅 Сравнение со вчера',
+      yesterday: 'Вчера',
+      today: 'Сегодня',
+      challengeLabel: '⚡ Вызов себе',
+      challengeText: 'Неделю назад ты выполнил {done} из {total} привычек. Сможешь повторить?',
+      challengeSub: 'Сегодня: {done} из {total}',
+      yesterdayNone: 'Вчера ты не выполнил ни одной привычки — сегодня самое время начать! 💪',
+      yesterdayBetter: 'Уже лучше чем вчера! Вчера было {done} из {total} 🔥',
+      yesterdaySame: 'Идёшь в темпе вчерашнего дня ({done} из {total}) ✅',
+      yesterdayWorse: 'Вчера ты сделал {done} из {total} — сможешь сегодня больше?',
+      aiPlaceholder: 'С чего начнём сегодня? Даже 5 минут — это шаг.',
+      aiPlaceholderNoHabits: 'С чего начнём? Даже один маленький шаг важен.',
+      profileFallback: 'Профиль',
+      remindAt: 'Хорошо, напомню в {time}.',
+    },
+    habits: {
+      title: 'Привычки',
+      tabHabits: 'Привычки',
+      tabProgress: 'Прогресс',
+      todayLeft: 'Сегодня осталось',
+      doneToday: 'Сделано сегодня',
+      minutes: 'мин',
+      streakDays: '🔥 {n} дней подряд',
+      visiblePublic: 'Видно друзьям',
+      visiblePrivate: 'Видно только тебе',
+      addHabit: 'Добавить привычку',
+      namePlaceholder: 'Название',
+      minutesLabel: 'Минут: {n}',
+      pairHabit: 'Парная привычка (с другом)',
+      fromFriends: 'Из друзей',
+      byCode: 'По коду',
+      friend: 'Друг',
+      noFriends: 'Нет друзей.',
+      findFriends: 'Найти на «Друзья»',
+      add: 'Добавить',
+      createByCode: 'Создать и позвать по коду',
+      inviteFriend: 'Пригласить друга',
+      inviteSent: 'Приглашение отправлено 👍',
+      notifications: 'Уведомления',
+      morningReminder: '🌅 Утреннее напоминание',
+      eveningReminder: '🌙 Вечернее напоминание',
+      chart14: 'График за 14 дней',
+      deleteTitle: 'Удалить привычку?',
+      deleteDesc: '«{name}» и весь прогресс будут удалены.',
+      visibilityHintTitle: 'Видно друзьям',
+      visibilityHintDesc:
+        'Друзья увидят эту привычку и твой прогресс по ней. Остальные привычки, задачи, цели и рефлексии остаются только твоими.',
+      gotIt: 'Понятно',
+      pairCreated: 'Парная привычка создана',
+      pairCreatedDesc:
+        'Отправь другу ссылку. Как примет — увидите прогресс друг друга каждый день.',
+      copyCode: 'Скопировать код',
+      share: 'Поделиться',
+      copied: 'Скопировано в буфер',
+    },
+    tasks: {
+      tabTasks: 'Задачи',
+      tabGoals: 'Цели',
+      title: 'Задачи на сегодня',
+      subtitle: '{done} из {total} выполнено',
+      addPlaceholder: 'Добавить задачу...',
+      left: 'Осталось',
+      done: 'Готово',
+      emptyTitle: 'День чистый',
+      emptyText: 'Добавь первую задачу — даже одно маленькое дело уже движение вперёд',
+      allDone: '🎉 Все задачи выполнены!',
+      goalsTitle: 'Ближайшие цели',
+      goalsSubtitle: '{done} из {total} достигнуто',
+      goalPlaceholder: 'Название цели...',
+      deadline: 'Срок выполнения',
+      emptyGoals: 'Добавь первую цель',
+      addStep: 'Добавить шаг...',
+      goalDone: 'выполнено!',
+      overdue: 'просрочено на {n} дн.',
+      dueToday: 'сегодня!',
+      dueTomorrow: 'завтра',
+      dueIn: 'через {n} дн.',
+    },
+    reflection: {
+      title: 'Как прошёл день?',
+      subtitle: 'Это займёт 30 секунд',
+      mood: 'Настроение',
+      obstaclesLabel: 'Что мешало сегодня?',
+      obstacles: ['Не было сил', 'Отвлёкся на телефон', 'Не было времени', 'Забыл', 'Не было настроения'],
+      noteLabel: 'Заметка (необязательно)',
+      notePlaceholder: 'Что угодно о сегодняшнем дне...',
+      doneToday: 'сделано сегодня',
+      bestStreak: 'лучший streak',
+      daysInApp: 'дней в приложении',
+      savedBanner: '✅ Рефлексия сохранена!',
+      savedBtn: 'Сохранено ✓',
+      history: 'История',
+    },
+    ai: {
+      title: 'AI помощник',
+      subtitle: 'Знает твои привычки и задачи',
+      empty: 'Привет! Я знаю твои привычки и задачи. Спроси меня что угодно!',
+      typing: 'думаю...',
+      inputPlaceholder: 'Напиши сообщение...',
+      error: 'Что-то пошло не так. Проверь подключение к интернету.',
+      suggestionsFirst: [
+        'Как у меня дела сегодня?',
+        'Что мне стоит сделать прямо сейчас?',
+        'Какие задачи остались со вчера?',
+        'Дай совет как не откладывать дела',
+      ],
+      suggestionsMore: [
+        'Что ещё мне стоит сделать?',
+        'Дай мотивацию',
+        'Как мои цели?',
+        'Что приоритетнее сейчас?',
+      ],
+    },
+    friends: {
+      title: 'Друзья',
+      requests: 'Запросы',
+      noNick: 'Без ника',
+      accept: 'Принять',
+      decline: 'Отклонить',
+      myFriends: 'Мои друзья',
+      createShared: 'Создать общую привычку',
+      removeFriend: 'Удалить из друзей',
+      emptyFriends: 'Пока нет друзей — найди по нику ниже или отправь другу инвайт-код привычки.',
+      searchLabel: 'Найти по нику или почте',
+      searchPlaceholder: 'Ник или почта',
+      noNickYet: 'ник ещё не задан',
+      notFound: 'Никого не нашли по «{q}»',
+      emailHint: 'Если друг ещё не задал ник — найди его по почте, введя адрес целиком.',
+      addFriend: 'Добавить',
+      requestSent: 'Запрос отправлен',
+      alreadyFriends: 'Уже в друзьях',
+      removeTitle: 'Удалить из друзей?',
+      thisUser: 'Этот пользователь',
+      removeDesc: 'пропадёт из твоего списка друзей, а ты — из его. Общие привычки останутся: их нужно удалять отдельно. Позже сможешь добавить друг друга снова.',
+      removing: 'Удаляем…',
+    },
+    friendProfile: {
+      loading: 'Загружаем…',
+      retry: 'Повторить',
+      loadFailed: 'Не удалось загрузить профиль.',
+      onlyFriends: 'Профиль доступен только друзьям.',
+      joined: 'с нами с {date}',
+      totalCompletions: 'всего выполнений',
+      bestStreak: 'лучший streak',
+      activeDays30: 'активных дней за 30',
+      activity30: 'Активность за 30 дней',
+      sharedHabits: 'Общие привычки',
+      habits: 'Привычки',
+      you: 'Ты',
+      friend: 'Друг',
+      emptyHabits: '{nick} пока не открыл свои привычки',
+      inviteTogether: 'Позвать делать вместе',
+      months: ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'],
+    },
+    pairs: {
+      title: 'Парные привычки',
+      inviteText: '{nick} зовёт тебя делать «{habit}» вместе',
+      accept: 'Принять',
+      decline: 'Отклонить',
+      dayWord: ['день', 'дня', 'дней'],
+      streakTogether: '🔥 {n} {word} вместе',
+      finish: 'Завершить',
+      you: 'Ты',
+      markDone: 'Отметить, что сделал',
+      me: 'Я',
+      nudge: 'Подтолкнуть 👊',
+      alreadyNudged: 'уже подтолкнул',
+      remove: 'Убрать',
+      share: 'Поделиться',
+      endTitle: 'Завершить парную привычку?',
+      endDesc: '«{habit}» завершится у обоих участников. Продолжать будет нельзя.',
+      end: 'Завершить',
+      haveCode: 'У меня есть код от друга',
+      codePlaceholder: 'Код от друга',
+      joined: 'Готово — вы в паре',
+      statusEnded: 'Пара завершена',
+      statusPending: 'ждём друга',
+      statusBothToday: 'Оба сделали сегодня',
+      statusStreak: '{n} {word} вместе подряд',
+      statusYouDone: 'Ты сделал. Ждём друга',
+      statusFriendDone: 'Друг сделал. Твой ход',
+      statusNone: 'Отметься, когда сделаешь сегодня',
+    },
+    toast: {
+      nudgeTitle: '{nick} подталкивает',
+      nudgeSub: 'Сделай «{habit}» прямо сейчас',
+      start: 'Начать',
+      open: 'Открыть',
+    },
+    auth: {
+      resetTitle: 'Восстановление пароля',
+      loginTitle: 'Войди в аккаунт',
+      signupTitle: 'Создай аккаунт',
+      passwordPlaceholder: 'Пароль',
+      forgot: 'Забыл пароль?',
+      sending: 'Отправка...',
+      sendLink: 'Отправить ссылку',
+      loading: 'Загрузка...',
+      login: 'Войти',
+      signup: 'Зарегистрироваться',
+      backToLogin: 'Назад ко входу',
+      noAccount: 'Нет аккаунта? Создать',
+      haveAccount: 'Уже есть аккаунт? Войти',
+      needEmail: 'Введи email',
+      needBoth: 'Заполни email и пароль',
+      resetSent: 'Мы отправили ссылку для сброса пароля на {email}. Проверь почту.',
+      alreadyRegistered: 'Этот email уже зарегистрирован. Попробуй войти.',
+      confirmSent: 'Мы отправили письмо на {email}. Подтверди почту по ссылке, затем войди.',
+      generic: 'Что-то пошло не так',
+    },
+    onboarding: {
+      title1: 'Начни с малого',
+      desc1: 'Не нужно менять всё сразу. Одно маленькое действие в день — и через месяц ты не узнаешь себя.',
+      next: 'Далее',
+      title2: 'Барьер — ноль',
+      desc2: 'Нажал одну кнопку — уже начал. Можешь остановиться через минуту. Главное — начать.',
+      title3: 'Выбери привычки',
+      desc3: 'Выбери с чего начнёшь. Можно добавить свои позже.',
+      minutes: 'мин',
+      pickAtLeastOne: 'Выбери хотя бы одну привычку',
+      start: 'Начать →',
+      skip: 'Пропустить — настрою позже',
+      presets: ['Пробежка', 'Выпить воду', 'Заметка дня', 'Медитация', 'Чтение', 'Зарядка', 'Прогулка', 'Режим сна'],
+    },
+    timer: {
+      hint: 'Просто начни — можешь остановиться в любой момент',
+      start: 'Старт',
+      pause: 'Пауза',
+      resume: 'Продолжить',
+      postpone: 'Отложить на 10 мин',
+      skipToday: 'Пропустить сегодня',
+    },
+    progress: {
+      title: 'Прогресс',
+      totalDone: 'всего выполнено',
+      bestStreak: 'лучший streak',
+      activeDays: 'активных дней',
+      habitsCount: 'привычек',
+      last7: 'Активность за 7 дней',
+      byHabit: 'По привычкам',
+      daysDone: 'дней выполнено',
+      weekdays: ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'],
+      chartLabel: 'Привычки',
+      heatmapLabel: 'Активность за последние 30 дней',
+      less: 'меньше',
+      more: 'больше',
+    },
+  },
+}
+
+// По умолчанию русский — язык устройства намеренно не учитываем, чтобы у всех
+// был предсказуемый старт. Казахский включается вручную в профиле.
+const DEFAULT_LOCALE = 'ru'
+
+function detect() {
+  let saved = null
+  try {
+    saved = localStorage.getItem(STORAGE_KEY)
+  } catch {
+    // приватный режим — останемся на языке по умолчанию
+  }
+  return saved && messages[saved] ? saved : DEFAULT_LOCALE
+}
+
+// Название текущего языка для строки в профиле.
+// Язык ответа модели для AI-промптов. Сама инструкция остаётся на русском:
+// промпты написаны по-русски, и так модели однозначнее, чем при смешении языков.
+export function promptLang() {
+  return locale.value === 'kk' ? 'на казахском языке (қазақ тілінде)' : 'по-русски'
+}
+
+export function localeLabel() {
+  return LOCALES.find((l) => l.code === locale.value)?.label || ''
+}
+
+export const locale = ref(detect())
+
+// Достаём значение по пути вида 'profile.title'. Если ключа нет — возвращаем
+// сам путь, чтобы пропажа строки была заметна, а не превращалась в пустоту.
+// params подставляются в плейсхолдеры вида {n}.
+export function t(path, params) {
+  const dict = messages[locale.value] || messages.ru
+  const val = path.split('.').reduce((o, k) => (o == null ? undefined : o[k]), dict)
+  if (val === undefined) return path
+  if (!params) return val
+  return String(val).replace(/\{(\w+)\}/g, (m, k) => (k in params ? params[k] : m))
+}
+
+// Множественное число. В русском три формы (дело / дела / дел), в казахском
+// существительное после числительного не изменяется — поэтому язык сам решает,
+// сколько форм брать, а вызывающий код об этом не знает.
+export function plural(n, path) {
+  const forms = t(path)
+  if (!Array.isArray(forms)) return forms
+  if (forms.length === 1) return forms[0]
+  const abs = Math.abs(n) % 100
+  const last = abs % 10
+  if (abs > 10 && abs < 20) return forms[2]
+  if (last === 1) return forms[0]
+  if (last >= 2 && last <= 4) return forms[1]
+  return forms[2]
+}
+
+// Язык, пришедший из профиля (нужен, чтобы серверные пуши и AI отвечали на том
+// же языке). Применяется, только если пользователь не выбирал язык на этом
+// устройстве вручную.
+export function applyProfileLocale(lang) {
+  if (!lang || !messages[lang]) return
+  let chosen = null
+  try {
+    chosen = localStorage.getItem(STORAGE_KEY)
+  } catch {
+    // нет доступа к хранилищу — доверяем профилю
+  }
+  if (!chosen) locale.value = lang
+}
+
+export function setLocale(code) {
+  if (!messages[code] || code === locale.value) return
+  locale.value = code
+  try {
+    localStorage.setItem(STORAGE_KEY, code)
+  } catch {
+    // не критично: язык не запомнится между запусками
+  }
+  document.documentElement.lang = code
+
+  // Сохраняем в профиль, чтобы серверные пуши приходили на этом же языке.
+  // Fire-and-forget: смена языка в интерфейсе не должна ждать сеть.
+  ;(async () => {
+    try {
+      const [{ supabase }, { logEvent }] = await Promise.all([
+        import('./lib/supabase'),
+        import('./composables/useAnalytics'),
+      ])
+      logEvent('language_changed', { lang: code })
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) return
+      await supabase.from('profiles').upsert({ id: user.id, lang: code })
+    } catch (e) {
+      console.log('save lang error:', e)
+    }
+  })()
+}

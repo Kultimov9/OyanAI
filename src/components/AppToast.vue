@@ -3,7 +3,7 @@
     <div v-if="toast" class="app-toast">
       <div class="at-card">
         <span class="at-text">{{ toast.text }}</span>
-        <button v-if="toast.to" class="at-go" @click="open">Открыть</button>
+        <button v-if="toast.to" class="at-go" @click="open">{{ t('toast.open') }}</button>
         <button class="at-x" @click="close">✕</button>
       </div>
     </div>
@@ -11,6 +11,7 @@
 </template>
 
 <script setup>
+import { t } from '../i18n'
 import { computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { appToast } from '../composables/uiState'

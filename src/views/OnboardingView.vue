@@ -2,47 +2,46 @@
   <div class="onboarding" :class="step === 2 ? 'light' : 'dark'">
     <div class="slide" v-if="step === 0">
       <div class="icon-wrap">🚀</div>
-      <h1 class="title">Начни с малого</h1>
+      <h1 class="title">{{ t('onboarding.title1') }}</h1>
       <p class="desc">
-        Не нужно менять всё сразу. Одно маленькое действие в день — и через месяц ты не узнаешь
-        себя.
+        {{ t('onboarding.desc1') }}
       </p>
-      <button class="btn" @click="step++">Далее</button>
+      <button class="btn" @click="step++">{{ t('onboarding.next') }}</button>
     </div>
 
     <div class="slide" v-if="step === 1">
       <div class="icon-wrap">⚡</div>
-      <h1 class="title">Барьер — ноль</h1>
+      <h1 class="title">{{ t('onboarding.title2') }}</h1>
       <p class="desc">
-        Нажал одну кнопку — уже начал. Можешь остановиться через минуту. Главное — начать.
+        {{ t('onboarding.desc2') }}
       </p>
-      <button class="btn" @click="step++">Далее</button>
+      <button class="btn" @click="step++">{{ t('onboarding.next') }}</button>
     </div>
 
     <div class="slide" v-if="step === 2">
       <div class="slide-header">
         <div class="icon-wrap light-icon">✨</div>
-        <h1 class="title light-title">Выбери привычки</h1>
-        <p class="desc light-desc">Выбери с чего начнёшь. Можно добавить свои позже.</p>
+        <h1 class="title light-title">{{ t('onboarding.title3') }}</h1>
+        <p class="desc light-desc">{{ t('onboarding.desc3') }}</p>
       </div>
       <div class="habit-grid">
         <button
           v-for="habit in defaultHabits"
           :key="habit.name"
           class="habit-option"
-          :class="{ selected: selectedHabits.includes(habit) }"
+          :class="{ selected: selectedIdx.includes(defaultHabits.indexOf(habit)) }"
           @click="toggleHabit(habit)"
         >
           <span class="habit-emoji">{{ habit.emoji }}</span>
           <span class="habit-name">{{ habit.name }}</span>
-          <span class="habit-duration">{{ habit.duration }} мин</span>
+          <span class="habit-duration">{{ habit.duration }} {{ t('onboarding.minutes') }}</span>
         </button>
       </div>
-      <p v-if="selectedHabits.length === 0" class="hint">Выбери хотя бы одну привычку</p>
+      <p v-if="selectedHabits.length === 0" class="hint">{{ t('onboarding.pickAtLeastOne') }}</p>
       <button class="btn light-btn" :disabled="selectedHabits.length === 0" @click="finish">
-        Начать →
+        {{ t('onboarding.start') }}
       </button>
-      <button class="skip-link" @click="skipOnboarding">Пропустить — настрою позже</button>
+      <button class="skip-link" @click="skipOnboarding">{{ t('onboarding.skip') }}</button>
     </div>
 
     <div class="dots">
@@ -57,33 +56,44 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useHabitsStore } from '../stores/habits'
 import { logEvent } from '../composables/useAnalytics'
 import { requestPushPermission } from '../composables/usePush'
+import { t } from '../i18n'
 
 const router = useRouter()
 const store = useHabitsStore()
 const step = ref(0)
 
-const defaultHabits = [
-  { emoji: '🏃', name: 'Пробежка', duration: 5 },
-  { emoji: '💧', name: 'Выпить воду', duration: 1 },
-  { emoji: '📝', name: 'Заметка дня', duration: 3 },
-  { emoji: '🧘', name: 'Медитация', duration: 5 },
-  { emoji: '📚', name: 'Чтение', duration: 10 },
-  { emoji: '💪', name: 'Зарядка', duration: 7 },
-  { emoji: '🚶', name: 'Прогулка', duration: 15 },
-  { emoji: '😴', name: 'Режим сна', duration: 1 },
+// Названия берутся из словаря: они попадают в базу как имена привычек, поэтому
+// человек, начавший на казахском, должен получить казахские названия.
+const PRESET_META = [
+  { emoji: '🏃', duration: 5 },
+  { emoji: '💧', duration: 1 },
+  { emoji: '📝', duration: 3 },
+  { emoji: '🧘', duration: 5 },
+  { emoji: '📚', duration: 10 },
+  { emoji: '💪', duration: 7 },
+  { emoji: '🚶', duration: 15 },
+  { emoji: '😴', duration: 1 },
 ]
 
-const selectedHabits = ref([])
+const defaultHabits = computed(() =>
+  PRESET_META.map((h, i) => ({ ...h, name: t('onboarding.presets')[i] })),
+)
+
+// Выбор храним по индексу, а не по объекту: при смене языка defaultHabits
+// пересоздаётся, и сравнение по ссылке перестало бы находить выбранное.
+const selectedIdx = ref([])
+const selectedHabits = computed(() => selectedIdx.value.map((i) => defaultHabits.value[i]))
 
 function toggleHabit(habit) {
-  const idx = selectedHabits.value.indexOf(habit)
-  if (idx === -1) selectedHabits.value.push(habit)
-  else selectedHabits.value.splice(idx, 1)
+  const i = defaultHabits.value.indexOf(habit)
+  const pos = selectedIdx.value.indexOf(i)
+  if (pos === -1) selectedIdx.value.push(i)
+  else selectedIdx.value.splice(pos, 1)
 }
 
 async function finish() {

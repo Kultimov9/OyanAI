@@ -10,16 +10,16 @@
       </Transition>
       <div class="ai-greet-actions">
         <button v-if="noHabits" class="ai-greet-primary" @click="router.push('/habits')">
-          Добавить первую привычку
+          {{ t('home.addFirstHabit') }}
         </button>
         <button v-else class="ai-greet-primary" @click="startTarget">
-          Начать {{ targetHabit?.duration }} минут →
+          {{ t('home.startMinutes', { n: targetHabit?.duration }) }}
         </button>
         <button v-if="noHabits" class="ai-greet-secondary" @click="noHabitsHidden = true">
-          Не сейчас
+          {{ t('home.notNow') }}
         </button>
         <button v-else class="ai-greet-secondary" @click="remindLater">
-          Не сейчас — напомни вечером
+          {{ t('home.remindEvening') }}
         </button>
       </div>
     </div>
@@ -40,16 +40,15 @@
       </div>
       <h1 class="title">
         <span v-if="pendingHabits.length > 0">
-          Сегодня {{ pendingHabits.length }} {{ declinate(pendingHabits.length) }}.<br />Начни с
-          малого.
+          {{ t('home.todayLeft', { n: pendingHabits.length, word: declinate(pendingHabits.length) }) }}<br />{{ t('home.startSmall') }}
         </span>
-        <span v-else-if="!noHabits"> Всё сделано! 🎉<br />Ты молодец. </span>
-        <span v-else> Добро пожаловать.<br />Твой путь начинается. </span>
+        <span v-else-if="!noHabits"> {{ t('home.allDone') }}<br />{{ t('home.wellDone') }} </span>
+        <span v-else> {{ t('home.welcome') }}<br />{{ t('home.pathBegins') }} </span>
       </h1>
     </div>
 
     <button v-if="startableHabits.length > 0" class="start-btn" @click="startFirst">
-      Начать прямо сейчас
+      {{ t('home.startNow') }}
     </button>
 
     <div class="tags">
@@ -59,23 +58,23 @@
     </div>
 
     <div v-if="completedHabits.length > 0" class="completed-section">
-      <p class="section-label">Уже сделано сегодня</p>
+      <p class="section-label">{{ t('home.doneToday') }}</p>
       <div class="completed-list">
         <div v-for="habit in completedHabits" :key="habit.id" class="completed-item">
           <span class="check">✓</span>
           <span>{{ habit.emoji }} {{ habit.name }}</span>
-          <span class="streak">{{ habit.streak }} дн.</span>
+          <span class="streak">{{ habit.streak }} {{ t('home.dayShort') }}</span>
         </div>
       </div>
     </div>
 
-    <button class="secondary-btn" @click="router.push('/habits')">Все привычки</button>
+    <button class="secondary-btn" @click="router.push('/habits')">{{ t('home.allHabits') }}</button>
     <div
       v-if="!noHabits"
       class="challenge-card"
       style="background: #1a1a1a; border: 1px solid #2a2a2a"
     >
-      <p class="challenge-label">📅 Сравнение со вчера</p>
+      <p class="challenge-label">{{ t('home.compareLabel') }}</p>
       <p class="challenge-text" style="color: #ffffff">{{ yesterdayMessage }}</p>
       <div class="challenge-bar-wrap" style="background: #2a2a2a">
         <div
@@ -89,22 +88,20 @@
         />
       </div>
       <div style="display: flex; justify-content: space-between">
-        <p class="challenge-sub" style="color: #9a9a92">Вчера: {{ yesterdayStats.done }}</p>
-        <p class="challenge-sub" style="color: #f5f0e8">Сегодня: {{ todayCompleted.length }}</p>
+        <p class="challenge-sub" style="color: #9a9a92">{{ t('home.yesterday') }}: {{ yesterdayStats.done }}</p>
+        <p class="challenge-sub" style="color: #f5f0e8">{{ t('home.today') }}: {{ todayCompleted.length }}</p>
       </div>
     </div>
 
     <div v-if="lastWeekStats" class="challenge-card">
-      <p class="challenge-label">⚡ Вызов себе</p>
+      <p class="challenge-label">{{ t('home.challengeLabel') }}</p>
       <p class="challenge-text">
-        Неделю назад ты выполнил
-        <span class="challenge-num">{{ lastWeekStats.done }} из {{ lastWeekStats.total }}</span>
-        привычек. Сможешь повторить?
+        {{ t('home.challengeText', { done: lastWeekStats.done, total: lastWeekStats.total }) }}
       </p>
       <div class="challenge-bar-wrap">
         <div class="challenge-bar" :style="{ width: challengeProgress }" />
       </div>
-      <p class="challenge-sub">Сегодня: {{ todayCompleted.length }} из {{ lastWeekStats.total }}</p>
+      <p class="challenge-sub">{{ t('home.challengeSub', { done: todayCompleted.length, total: lastWeekStats.total }) }}</p>
     </div>
     <HeatMap />
   </div>
@@ -115,6 +112,7 @@ import { computed, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useHabitsStore } from '../stores/habits'
 import { useScreenRefresh } from '../composables/useScreenRefresh'
+import { t, plural } from '../i18n'
 import HeatMap from '../components/HeatMap.vue'
 import { generateGreeting } from '../composables/useAI'
 import { scheduleEveningReminder } from '../composables/useNotifications'
@@ -132,7 +130,7 @@ const startableHabits = computed(() => store.todayStartable)
 
 // Профиль в шапке: имя = ник или часть email до @; буква для запасного аватара.
 const displayName = computed(
-  () => store.username || (store.email ? store.email.split('@')[0] : 'Профиль'),
+  () => store.username || (store.email ? store.email.split('@')[0] : t('home.profileFallback')),
 )
 const avatarLetter = computed(() =>
   (store.username || store.email || '?').charAt(0).toUpperCase(),
@@ -141,10 +139,10 @@ const completedHabits = computed(() => store.todayCompleted)
 const todayCompleted = computed(() => store.todayCompleted)
 
 // === AI-приветствие ===
-const PLACEHOLDER = 'С чего начнём сегодня? Даже 5 минут — это шаг.'
-const PLACEHOLDER_NO_HABITS = 'С чего начнём? Даже один маленький шаг важен.'
+const PLACEHOLDER = () => t('home.aiPlaceholder')
+const PLACEHOLDER_NO_HABITS = () => t('home.aiPlaceholderNoHabits')
 const NO_HABITS_KEY = '__none__' // метка кэша приветствия для кейса без привычек
-const greetingText = ref(PLACEHOLDER)
+const greetingText = ref(PLACEHOLDER())
 const todayStr = () => new Date().toISOString().split('T')[0]
 const isDoneToday = (h) => !!h && h.completedDates.includes(todayStr())
 
@@ -186,7 +184,7 @@ async function remindLater() {
       // Подтверждаем, что напоминание поставлено, затем сворачиваем блок.
       const hh = String(at.getHours()).padStart(2, '0')
       const mm = String(at.getMinutes()).padStart(2, '0')
-      greetingText.value = `Хорошо, напомню в ${hh}:${mm}.`
+      greetingText.value = t('home.remindAt', { time: `${hh}:${mm}` })
       setTimeout(() => store.dismissAiGreeting(), 1600)
       return
     }
@@ -203,7 +201,7 @@ onMounted(async () => {
   // Показываем всегда (дневной dismiss не применяем), текст кэшируем на день —
   // чтобы не дёргать API при каждом входе.
   if (noHabits.value) {
-    greetingText.value = PLACEHOLDER_NO_HABITS
+    greetingText.value = PLACEHOLDER_NO_HABITS()
     if (store.aiGreetingDate === today && store.aiGreeting && store.aiGreetingHabitId === NO_HABITS_KEY) {
       greetingText.value = store.aiGreeting
       return
@@ -252,15 +250,14 @@ onMounted(async () => {
 
 const greeting = computed(() => {
   const h = new Date().getHours()
-  if (h < 12) return 'Доброе утро'
-  if (h < 18) return 'Добрый день'
-  return 'Добрый вечер'
+  if (h < 12) return t('home.greetMorning')
+  if (h < 18) return t('home.greetDay')
+  return t('home.greetEvening')
 })
 
+// Форму слова выбирает локаль: в русском их три, в казахском одна.
 function declinate(n) {
-  if (n === 1) return 'дело'
-  if (n < 5) return 'дела'
-  return 'дел'
+  return plural(n, 'home.caseWord')
 }
 
 function startFirst() {
@@ -288,11 +285,10 @@ const yesterdayStats = computed(() => {
 const yesterdayMessage = computed(() => {
   const { done, total } = yesterdayStats.value
   const todayDone = todayCompleted.value.length
-  if (done === 0) return `Вчера ты не выполнил ни одной привычки — сегодня самое время начать! 💪`
-  if (todayDone > done) return `Уже лучше чем вчера! Вчера было ${done} из ${total} 🔥`
-  if (todayDone === done && todayDone > 0)
-    return `Идёшь в темпе вчерашнего дня (${done} из ${total}) ✅`
-  return `Вчера ты сделал ${done} из ${total} — сможешь сегодня больше?`
+  if (done === 0) return t('home.yesterdayNone')
+  if (todayDone > done) return t('home.yesterdayBetter', { done, total })
+  if (todayDone === done && todayDone > 0) return t('home.yesterdaySame', { done, total })
+  return t('home.yesterdayWorse', { done, total })
 })
 
 const challengeProgress = computed(() => {

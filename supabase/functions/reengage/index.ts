@@ -5,6 +5,7 @@
 // AI) выполнялись только для тех, кому пуш реально можно отправить.
 
 import { admin, sendPush, checkSecret, json } from '../_shared/push.ts'
+import { dict, fill, langOf } from '../_shared/i18n.ts'
 
 // Часовой пояс пользователей. Пока один для всех — см. ТЗ.
 const TZ_OFFSET_HOURS = 5
@@ -64,11 +65,12 @@ function bestStreak(dates: string[]): number {
 // Уменьшенная планка: половина от обычной, но не меньше двух минут.
 const halfDuration = (d: number | null) => Math.max(2, Math.floor((d || 5) / 2))
 
-function fallbackText(name: string, idleDays: number, minutes: number) {
-  return `${idleDays} дня без «${name}» — бывает. Начнём заново с ${minutes} минут?`
+function fallbackText(lang: string, name: string, idleDays: number, minutes: number) {
+  return fill(dict(lang).reengageFallback, { habit: name, days: idleDays, minutes })
 }
 
 async function aiText(ctx: {
+  lang: string
   name: string
   idleDays: number
   best: number
@@ -85,8 +87,8 @@ async function aiText(ctx: {
     'Признай, что перерыв — это нормально, без драмы и без пафоса.',
     'Предложи вернуться с уменьшенной планкой — ровно столько минут, сколько указано.',
     'Максимум 2 коротких предложения, до 120 символов.',
-    'По-русски, на «ты», без восклицательных знаков, без эмодзи.',
-    'Хороший пример: «Три дня без чтения — бывает. Начнём заново с 5 минут?»',
+    `Пиши ${dict(ctx.lang).promptLang}, на «ты», без восклицательных знаков, без эмодзи.`,
+    `Хороший пример: «${dict(ctx.lang).promptExample}»`,
     'Плохой пример: «Ты пропустил 3 дня! Не сдавайся!»',
     'В ответе — только текст уведомления, без кавычек и пояснений.',
   ].join(' ')
@@ -231,14 +233,17 @@ Deno.serve(async (req) => {
       .order('date', { ascending: false })
       .limit(1)
 
+    // Язык получателя: и промпт, и заготовка должны быть на нём.
+    const lang = await langOf(db, userId)
     const text =
       (await aiText({
+        lang,
         name: pick.habit.name,
         idleDays: pick.idleDays,
         best: pick.best,
         minutes,
         reflection: refl?.[0]?.note || null,
-      })) || fallbackText(pick.habit.name, pick.idleDays, minutes)
+      })) || fallbackText(lang, pick.habit.name, pick.idleDays, minutes)
 
     // Строку журнала создаём до отправки: её id уходит в payload, чтобы клиент
     // мог отметить opened при тапе.

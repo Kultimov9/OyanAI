@@ -1,14 +1,14 @@
 <template>
   <div class="ai-view">
     <div class="page-header">
-      <h1 class="title">AI помощник</h1>
-      <p class="subtitle">Знает твои привычки и задачи</p>
+      <h1 class="title">{{ t('ai.title') }}</h1>
+      <p class="subtitle">{{ t('ai.subtitle') }}</p>
     </div>
     <div class="content">
       <div class="messages" ref="messagesEl">
         <div v-if="messages.length === 0" class="empty">
           <p class="empty-emoji">🤖</p>
-          <p class="empty-text">Привет! Я знаю твои привычки и задачи. Спроси меня что угодно!</p>
+          <p class="empty-text">{{ t('ai.empty') }}</p>
           <div class="suggestions">
             <button
               v-for="s in suggestions"
@@ -27,7 +27,7 @@
           </div>
 
           <div v-if="loading" class="message assistant">
-            <p class="message-text typing">думаю...</p>
+            <p class="message-text typing">{{ t('ai.typing') }}</p>
           </div>
 
           <div v-if="!loading" class="quick-suggestions">
@@ -47,7 +47,7 @@
         <input
           v-model="input"
           class="chat-input"
-          placeholder="Напиши сообщение..."
+          :placeholder="t('ai.inputPlaceholder')"
           @keydown.enter="sendMessage()"
           :disabled="loading"
         />
@@ -60,7 +60,8 @@
 </template>
 
 <script setup>
-import { ref, nextTick, onMounted } from 'vue'
+import { t } from '../i18n'
+import { ref, nextTick, onMounted, computed } from 'vue'
 import { Send } from 'lucide-vue-next'
 import { askAI } from '../composables/useAI'
 import { useHabitsStore } from '../stores/habits'
@@ -72,19 +73,9 @@ const input = ref('')
 const loading = ref(false)
 const messagesEl = ref(null)
 
-const suggestions = [
-  'Как у меня дела сегодня?',
-  'Что мне стоит сделать прямо сейчас?',
-  'Какие задачи остались со вчера?',
-  'Дай совет как не откладывать дела',
-]
-
-const quickSuggestions = [
-  'Что ещё мне стоит сделать?',
-  'Дай мотивацию',
-  'Как мои цели?',
-  'Что приоритетнее сейчас?',
-]
+// computed, а не массив: при смене языка подсказки должны перерисоваться.
+const suggestions = computed(() => t('ai.suggestionsFirst'))
+const quickSuggestions = computed(() => t('ai.suggestionsMore'))
 
 onMounted(() => {
   const today = new Date().toISOString().split('T')[0]
@@ -117,7 +108,7 @@ async function sendMessage(text) {
     messages.value.push({
       id: Date.now() + 1,
       role: 'assistant',
-      text: 'Что-то пошло не так. Проверь подключение к интернету.',
+      text: t('ai.error'),
     })
   }
 

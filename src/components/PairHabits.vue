@@ -5,19 +5,19 @@
       <div v-for="pair in pairsStore.pendingInvites" :key="pair.id" class="invite-card">
         <p class="invite-text">
           <span class="invite-emoji">{{ pair.emoji }}</span>
-          {{ pairsStore.partnerName(pair) }} зовёт тебя делать «{{ pair.habit_name }}» вместе
+          {{ t('pairs.inviteText', { nick: pairsStore.partnerName(pair), habit: pair.habit_name }) }}
         </p>
         <div class="invite-actions">
-          <button class="btn-accept" @click="pairsStore.acceptPairInvite(pair.id)">Принять</button>
+          <button class="btn-accept" @click="pairsStore.acceptPairInvite(pair.id)">{{ t('pairs.accept') }}</button>
           <button class="btn-decline" @click="pairsStore.declinePairInvite(pair.id)">
-            Отклонить
+            {{ t('pairs.decline') }}
           </button>
         </div>
       </div>
     </div>
 
     <p class="section-label">
-      Парные привычки
+      {{ t('pairs.title') }}
       <span v-if="pairsStore.pendingInvites.length" class="badge">
         {{ pairsStore.pendingInvites.length }}
       </span>
@@ -36,21 +36,21 @@
             <span class="pair-emoji">{{ pair.emoji }}</span>
             <span class="pc-name">{{ pair.habit_name }}</span>
             <span v-if="pairsStore.pairStreak(pair) > 0" class="pc-streak">
-              🔥 {{ pairsStore.pairStreak(pair) }} {{ dayWord(pairsStore.pairStreak(pair)) }} вместе
+              {{ t('pairs.streakTogether', { n: pairsStore.pairStreak(pair), word: dayWord(pairsStore.pairStreak(pair)) }) }}
             </span>
-            <button class="pair-del" title="Завершить" @click.stop="pairToEnd = pair">
+            <button class="pair-del" :title="t('pairs.finish')" @click.stop="pairToEnd = pair">
               <X :size="16" />
             </button>
           </div>
 
           <!-- Ряд «Ты» -->
           <div class="pc-row">
-            <span class="pc-who">Ты</span>
+            <span class="pc-who">{{ t('pairs.you') }}</span>
             <span v-if="pairsStore.myStatusToday(pair)" class="pc-when">
               {{ pairsStore.completionTimeToday(pair, pairsStore.userId) }}
             </span>
             <button v-else class="pc-mark-btn" @click.stop="complete(pair)">
-              Отметить, что сделал
+              {{ t('pairs.markDone') }}
             </button>
             <button
               class="pc-avatar me"
@@ -58,7 +58,7 @@
               @click.stop="complete(pair)"
             >
               <img v-if="habitsStore.avatarUrl" :src="habitsStore.avatarUrl" alt="" />
-              <span v-else class="pc-av-letter">{{ initial(habitsStore.username || 'Я') }}</span>
+              <span v-else class="pc-av-letter">{{ initial(habitsStore.username || t('pairs.me')) }}</span>
               <span v-if="pairsStore.myStatusToday(pair)" class="pc-badge">
                 <Check :size="10" />
               </span>
@@ -76,9 +76,9 @@
               class="pc-nudge"
               @click.stop="doNudge(pair)"
             >
-              Подтолкнуть 👊
+              {{ t('pairs.nudge') }}
             </button>
-            <span v-else class="pc-nudged">уже подтолкнул</span>
+            <span v-else class="pc-nudged">{{ t('pairs.alreadyNudged') }}</span>
             <span class="pc-avatar" :class="{ done: pairsStore.partnerStatusToday(pair) }">
               <img
                 v-if="pairsStore.partnerAvatar(pair)"
@@ -130,11 +130,11 @@
               class="remove-btn"
               @click.stop="pairsStore.removePair(pair.id)"
             >
-              Убрать
+              {{ t('pairs.remove') }}
             </button>
             <template v-else>
-              <button class="reshare-btn" @click.stop="reshare(pair)">Поделиться</button>
-              <button class="pair-del" title="Завершить" @click.stop="pairToEnd = pair">
+              <button class="reshare-btn" @click.stop="reshare(pair)">{{ t('pairs.share') }}</button>
+              <button class="pair-del" :title="t('pairs.finish')" @click.stop="pairToEnd = pair">
                 <X :size="16" />
               </button>
             </template>
@@ -146,39 +146,40 @@
     <!-- Подтверждение завершения пары -->
     <div v-if="pairToEnd" class="pm-overlay" @click="pairToEnd = null">
       <div class="pm" @click.stop>
-        <p class="pm-title">Завершить парную привычку?</p>
+        <p class="pm-title">{{ t('pairs.endTitle') }}</p>
         <p class="pm-desc">
-          «{{ pairToEnd.habit_name }}» завершится у обоих участников. Продолжать будет нельзя.
+          {{ t('pairs.endDesc', { habit: pairToEnd.habit_name }) }}
         </p>
         <div class="pm-actions">
-          <button class="pm-cancel" @click="pairToEnd = null">Отмена</button>
-          <button class="pm-confirm" @click="doEnd">Завершить</button>
+          <button class="pm-cancel" @click="pairToEnd = null">{{ t('common.cancel') }}</button>
+          <button class="pm-confirm" @click="doEnd">{{ t('pairs.end') }}</button>
         </div>
       </div>
     </div>
 
     <!-- Ввод кода от друга -->
     <button v-if="!showJoin" class="join-link" @click="showJoin = true">
-      У меня есть код от друга
+      {{ t('pairs.haveCode') }}
     </button>
     <div v-else class="join-form">
       <input
         v-model="joinCode"
         class="join-input"
-        placeholder="Код от друга"
+        :placeholder="t('pairs.codePlaceholder')"
         maxlength="12"
         @input="joinError = ''"
       />
       <button class="join-btn" :disabled="joining || !joinCode.trim()" @click="join">
-        {{ joining ? '...' : 'Принять' }}
+        {{ joining ? '...' : t('pairs.accept') }}
       </button>
     </div>
     <p v-if="joinError" class="join-error">{{ joinError }}</p>
-    <p v-if="joined" class="join-ok">Готово — вы в паре</p>
+    <p v-if="joined" class="join-ok">{{ t('pairs.joined') }}</p>
   </div>
 </template>
 
 <script setup>
+import { t, plural } from '../i18n'
 import { ref, onMounted } from 'vue'
 import { Check, X } from 'lucide-vue-next'
 import { usePairsStore } from '../stores/pairs'
@@ -232,26 +233,22 @@ function initial(name) {
 }
 
 function dayWord(n) {
-  const a = n % 10
-  const b = n % 100
-  if (a === 1 && b !== 11) return 'день'
-  if (a >= 2 && a <= 4 && (b < 10 || b >= 20)) return 'дня'
-  return 'дней'
+  return plural(n, 'pairs.dayWord')
 }
 
 // Понятная подпись под названием: что происходит с парой прямо сейчас.
 function pairSub(pair) {
-  if (pair.status === 'ended') return 'Пара завершена'
-  if (pair.status === 'pending') return 'ждём друга'
+  if (pair.status === 'ended') return t('pairs.statusEnded')
+  if (pair.status === 'pending') return t('pairs.statusPending')
   const my = pairsStore.myStatusToday(pair)
   const partner = pairsStore.partnerStatusToday(pair)
   if (my && partner) {
     const s = pairsStore.pairStreak(pair)
-    return s > 0 ? `${s} ${dayWord(s)} вместе подряд` : 'Оба сделали сегодня'
+    return s > 0 ? t('pairs.statusStreak', { n: s, word: dayWord(s) }) : t('pairs.statusBothToday')
   }
-  if (my && !partner) return 'Ты сделал. Ждём друга'
-  if (!my && partner) return 'Друг сделал. Твой ход'
-  return 'Отметься, когда сделаешь сегодня'
+  if (my && !partner) return t('pairs.statusYouDone')
+  if (!my && partner) return t('pairs.statusFriendDone')
+  return t('pairs.statusNone')
 }
 
 function reshare(pair) {

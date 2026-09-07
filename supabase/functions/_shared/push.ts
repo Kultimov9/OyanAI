@@ -14,10 +14,15 @@ export function admin() {
   )
 }
 
-// Ник для текста уведомления. Пустой ник — не повод падать.
-export async function nickOf(db: ReturnType<typeof admin>, userId: string) {
+// Ник для текста уведомления. Возвращаем null, если ника нет: подстановку
+// вместо него выбирает вызывающий код на языке получателя — раньше здесь был
+// зашит русский «Друг», и он попадал бы в казахский текст.
+export async function nickOf(
+  db: ReturnType<typeof admin>,
+  userId: string,
+): Promise<string | null> {
   const { data } = await db.from('profiles').select('username').eq('id', userId).maybeSingle()
-  return data?.username || 'Друг'
+  return data?.username || null
 }
 
 export type PushPayload = {
