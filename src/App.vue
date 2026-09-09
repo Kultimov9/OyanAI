@@ -81,7 +81,7 @@ onMounted(async () => {
         if (data?.screen === 'reengage' && data.habit_id) {
           router.push({
             path: `/timer/${data.habit_id}`,
-            query: { min: String(data.minutes || ''), re: String(data.log_id || '') },
+            query: { min: String(data.minutes || ''), re: String(data.push_id || '') },
           })
         } else if (data?.screen === 'friends') router.push('/friends')
         else if (data?.screen === 'pair') router.push('/habits')

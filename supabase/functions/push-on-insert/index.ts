@@ -5,6 +5,7 @@
 
 import { admin, nickOf, sendPush, checkSecret, json } from '../_shared/push.ts'
 import { dict, fill, langOf } from '../_shared/i18n.ts'
+import { canSend, logPush, unlogPush } from '../_shared/limits.ts'
 
 type Hook = {
   type: string
@@ -75,11 +76,33 @@ Deno.serve(async (req) => {
     screen = 'pair'
   }
 
+  // Антиспам общий для всех серверных пушей. Соц. событие приоритетнее
+  // остальных типов, но суточный потолок действует и на него.
+  const TZ_OFFSET_HOURS = 5
+  const local = new Date(Date.now() + TZ_OFFSET_HOURS * 3600_000)
+  const dayStart = new Date(
+    Date.parse(local.toISOString().split('T')[0] + 'T00:00:00Z') - TZ_OFFSET_HOURS * 3600_000,
+  )
+  const decision = await canSend(db, to, 'social', dayStart.toISOString())
+  if (!decision.allow) return json({ skipped: decision.reason })
+
+  const logId = await logPush(db, to, 'social', local.getUTCHours())
+
   const res = await sendPush({
     user_id: to,
     body,
-    data: { screen, from_user: from, table: hook.table, record_id: r.id },
+    data: {
+      screen,
+      from_user: from,
+      table: hook.table,
+      record_id: r.id,
+      push_id: logId,
+      push_type: 'social',
+    },
   })
+
+  // Пуш не ушёл — снимаем запись, иначе она съест слот и исказит метрики.
+  if (!res.ok || 'skipped' in res) await unlogPush(db, logId)
 
   return json(res, res.ok ? 200 : 502)
 })

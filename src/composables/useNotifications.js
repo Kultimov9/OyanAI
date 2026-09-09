@@ -49,6 +49,23 @@ export function isObsolete(notification, store, today) {
   return false
 }
 
+// Час напоминания. Считаем от активного часа пользователя: зовём за час ДО
+// того, как он обычно берётся за дело, а не в фиксированное время.
+// Ночь исключена жёстко — 22:00–09:00 не трогаем ни при каких данных.
+const QUIET_FROM = 22
+const QUIET_TO = 9
+
+function reminderHour(activeHour, fallback) {
+  if (activeHour == null) return clampAwake(fallback)
+  return clampAwake(activeHour - 1)
+}
+
+function clampAwake(h) {
+  const x = ((h % 24) + 24) % 24
+  if (x >= QUIET_FROM || x < QUIET_TO) return QUIET_TO
+  return x
+}
+
 export async function setupNotifications() {
   const store = useHabitsStore()
   const permission = await LocalNotifications.requestPermissions()
@@ -62,23 +79,37 @@ export async function setupNotifications() {
   // Старый фолбэк по тексту — для уведомлений без привязки к id вообще.
   const isAboutDoneHabit = (n) => doneToday.some((h) => mentionsHabit(n, h.name))
 
+  // Всё на сегодня сделано — напоминать не о чем. Планировщик вызывается при
+  // каждом открытии приложения, поэтому после выполнения последней привычки
+  // напоминания снимутся сами.
+  const allDone = store.habits.length > 0 && doneToday.length === store.habits.length
+
+  const morningHour = reminderHour(store.activeHour, store.notifications.morningHour)
+  const eveningHour = clampAwake(store.notifications.eveningHour)
+
   const notifications = [
-    {
-      id: 1,
-      title: 'Доброе утро 👋',
-      body: 'Одно маленькое дело изменит твой день. Начни прямо сейчас.',
-      schedule: {
-        on: { hour: store.notifications.morningHour, minute: 0 },
-        repeats: true,
-        allowWhileIdle: true,
-      },
-    },
+    // Утреннее напоминание про привычки: не нужно, если на сегодня всё сделано.
+    ...(allDone
+      ? []
+      : [
+          {
+            id: 1,
+            title: 'Доброе утро 👋',
+            body: 'Одно маленькое дело изменит твой день. Начни прямо сейчас.',
+            schedule: {
+              on: { hour: morningHour, minute: 0 },
+              repeats: true,
+              allowWhileIdle: true,
+            },
+          },
+        ]),
+    // Вечернее — про рефлексию, а не про привычки, поэтому остаётся всегда.
     {
       id: 2,
       title: 'Как прошёл день? 💬',
       body: 'Запиши рефлексию — это займёт 30 секунд.',
       schedule: {
-        on: { hour: store.notifications.eveningHour, minute: 0 },
+        on: { hour: eveningHour, minute: 0 },
         repeats: true,
         allowWhileIdle: true,
       },

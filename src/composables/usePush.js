@@ -49,6 +49,44 @@ async function subscriptionId(OneSignal) {
   }
 }
 
+// Отметка открытия в общем журнале. По ней считаются и антиспам (пять
+// непрочитанных подряд снижают частоту), и сводка в админке.
+// Id последнего открытого пуша держим в памяти: по нему привяжем выполнение
+// привычки, если оно случится в ближайшие полчаса.
+const COMPLETION_WINDOW_MS = 30 * 60 * 1000
+let lastOpened = null
+
+async function markPushOpened(pushId) {
+  if (!pushId) return
+  lastOpened = { id: pushId, at: Date.now() }
+  try {
+    await supabase
+      .from('push_log')
+      .update({ opened: true, opened_at: new Date().toISOString() })
+      .eq('id', pushId)
+  } catch (e) {
+    console.log('push_log opened update error:', e)
+  }
+}
+
+// Привычка выполнена вскоре после открытия пуша — самый ценный сигнал.
+// Вызывается из стора при выполнении привычки.
+export async function notePushLedToCompletion() {
+  if (!lastOpened) return
+  if (Date.now() - lastOpened.at > COMPLETION_WINDOW_MS) {
+    lastOpened = null
+    return
+  }
+  const { id } = lastOpened
+  lastOpened = null
+  logEvent('push_led_to_completion', { push_id: id })
+  try {
+    await supabase.from('push_log').update({ led_to_completion: true }).eq('id', id)
+  } catch (e) {
+    console.log('push_log completion update error:', e)
+  }
+}
+
 // Инициализация + слушатели. Вызывается один раз после входа.
 // onOpen({ screen, ... }) — переход по тапу, роутер передаёт App.vue.
 export async function initPush({ onOpen } = {}) {
@@ -81,7 +119,8 @@ export async function initPush({ onOpen } = {}) {
 
   OneSignal.Notifications.addEventListener('click', (event) => {
     const data = event?.notification?.additionalData || {}
-    logEvent('push_opened', { screen: data.screen || null, table: data.table || null })
+    logEvent('push_opened', { screen: data.screen || null, type: data.push_type || null })
+    markPushOpened(data.push_id)
     openHandler?.(data)
   })
 

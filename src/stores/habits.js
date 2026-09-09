@@ -19,6 +19,9 @@ export const useHabitsStore = defineStore('habits', {
   state: () => ({
     userId: null,
     email: null,
+    // Час, в который пользователь обычно активен. Считается на сервере раз в
+    // неделю; null — данных мало, работают дефолтные времена напоминаний.
+    activeHour: null,
     username: null,
     avatarUrl: null,
     habits: [],
@@ -127,6 +130,7 @@ export const useHabitsStore = defineStore('habits', {
       // Язык из профиля — чтобы после переустановки или на втором устройстве
       // интерфейс открылся на том же языке. Ручной выбор на устройстве важнее.
       applyProfileLocale(profileRes.data?.lang)
+      this.activeHour = profileRes.data?.active_hour ?? null
 
       // Парные привычки — грузим отдельным стором, не блокируя роутинг.
       import('./pairs')
@@ -277,6 +281,12 @@ export const useHabitsStore = defineStore('habits', {
         import('../composables/useNotifications')
           .then(({ cancelNotificationsForHabit }) => cancelNotificationsForHabit(habit.name))
           .catch((e) => console.log('cancel notifications error:', e))
+
+        // Если привычку выполнили вскоре после открытия пуша — засчитываем это
+        // пушу. Метрика показывает, какие уведомления реально приводят к делу.
+        import('../composables/usePush')
+          .then(({ notePushLedToCompletion }) => notePushLedToCompletion())
+          .catch(() => {})
 
         const { error } = await supabase
           .from('habits')

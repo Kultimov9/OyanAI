@@ -43,7 +43,6 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useHabitsStore } from '../stores/habits'
-import { supabase } from '../lib/supabase'
 import { logEvent } from '../composables/useAnalytics'
 import { t } from '../i18n'
 
@@ -167,19 +166,11 @@ function resume() {
   tick()
 }
 
-// Пришли из пуша-возвращения: отмечаем открытие. По этому флагу функция решает,
-// не пора ли выдержать паузу — два проигнорированных пуша подряд её включают.
-async function markReengageOpened() {
+// Пришли из пуша-возвращения. Саму отметку об открытии ставит usePush — она
+// общая для всех типов пушей, здесь только событие для аналитики.
+function markReengageOpened() {
   if (!reengageId.value) return
   logEvent('reengage_opened', { habitId: route.params.id, minutes: overrideMinutes.value })
-  try {
-    await supabase
-      .from('reengagement_log')
-      .update({ opened: true })
-      .eq('id', reengageId.value)
-  } catch (e) {
-    console.log('reengage opened update error:', e)
-  }
 }
 
 function complete() {

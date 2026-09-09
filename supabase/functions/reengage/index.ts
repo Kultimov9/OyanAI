@@ -6,6 +6,7 @@
 
 import { admin, sendPush, checkSecret, json } from '../_shared/push.ts'
 import { dict, fill, langOf } from '../_shared/i18n.ts'
+import { canSend, logPush, unlogPush } from '../_shared/limits.ts'
 
 // Часовой пояс пользователей. Пока один для всех — см. ТЗ.
 const TZ_OFFSET_HOURS = 5
@@ -134,6 +135,42 @@ async function aiText(ctx: {
   }
 }
 
+// Текст от AI кэшируется на сутки: за день на пользователя допускается не
+// больше одной генерации. Ошибка кэша не должна ронять отправку — при сбое
+// просто сгенерируем заново.
+async function cachedAiText(
+  db: ReturnType<typeof admin>,
+  userId: string,
+  lang: string,
+  ctx: Parameters<typeof aiText>[0],
+): Promise<string | null> {
+  const since = new Date(Date.now() - DAY_MS).toISOString()
+  try {
+    const { data } = await db
+      .from('notification_cache')
+      .select('text, lang')
+      .eq('user_id', userId)
+      .eq('type', 'reengage')
+      .gte('created_at', since)
+      .order('created_at', { ascending: false })
+      .limit(1)
+    // Язык мог смениться со вчера — тогда кэш не подходит.
+    if (data?.[0]?.text && data[0].lang === lang) return data[0].text
+  } catch (e) {
+    console.error('notification_cache read failed', e)
+  }
+
+  const text = await aiText(ctx)
+  if (!text) return null
+
+  try {
+    await db.from('notification_cache').insert({ user_id: userId, type: 'reengage', lang, text })
+  } catch (e) {
+    console.error('notification_cache write failed', e)
+  }
+  return text
+}
+
 Deno.serve(async (req) => {
   if (req.method !== 'POST') return json({ error: 'method not allowed' }, 405)
   if (!checkSecret(req)) return json({ error: 'forbidden' }, 403)
@@ -171,11 +208,21 @@ Deno.serve(async (req) => {
       continue
     }
 
-    // Ограничения по журналу отправок.
+    // Общий антиспам: суточный потолок, резерв слота под соц. события и
+    // замедление после пяти непрочитанных подряд.
+    const decision = await canSend(db, userId, 'reengage', dayStart.toISOString())
+    if (!decision.allow) {
+      skip(decision.reason)
+      continue
+    }
+
+    // Собственное ограничение возвращающих: не чаще раза в 4 дня и пауза
+    // после двух проигнорированных подряд.
     const { data: log } = await db
-      .from('reengagement_log')
+      .from('push_log')
       .select('sent_at, opened')
       .eq('user_id', userId)
+      .eq('type', 'reengage')
       .order('sent_at', { ascending: false })
       .limit(2)
 
@@ -236,7 +283,7 @@ Deno.serve(async (req) => {
     // Язык получателя: и промпт, и заготовка должны быть на нём.
     const lang = await langOf(db, userId)
     const text =
-      (await aiText({
+      (await cachedAiText(db, userId, lang, {
         lang,
         name: pick.habit.name,
         idleDays: pick.idleDays,
@@ -246,15 +293,9 @@ Deno.serve(async (req) => {
       })) || fallbackText(lang, pick.habit.name, pick.idleDays, minutes)
 
     // Строку журнала создаём до отправки: её id уходит в payload, чтобы клиент
-    // мог отметить opened при тапе.
-    const { data: logRow, error: logErr } = await db
-      .from('reengagement_log')
-      .insert({ user_id: userId, habit_id: pick.habit.id })
-      .select('id')
-      .single()
-
-    if (logErr) {
-      console.error('reengagement_log insert failed', logErr)
+    // мог отметить открытие.
+    const logId = await logPush(db, userId, 'reengage', hour)
+    if (!logId) {
       skip('log_failed')
       continue
     }
@@ -266,15 +307,16 @@ Deno.serve(async (req) => {
         screen: 'reengage',
         habit_id: pick.habit.id,
         minutes,
-        log_id: logRow.id,
+        push_id: logId,
+        push_type: 'reengage',
       },
     })
 
     if (res.ok && !('skipped' in res)) {
       stats.sent++
     } else {
-      // Пуш не ушёл — журнальная строка соврала бы про отправку.
-      await db.from('reengagement_log').delete().eq('id', logRow.id)
+      // Пуш не ушёл — журнальная строка соврала бы про отправку и съела слот.
+      await unlogPush(db, logId)
       skip('push_failed')
     }
   }
