@@ -12,6 +12,7 @@ import AuthView from '../views/AuthView.vue'
 import ProfileView from '../views/ProfileView.vue'
 import FriendsView from '../views/FriendsView.vue'
 import FriendProfileView from '../views/FriendProfileView.vue'
+import BlockedView from '../views/BlockedView.vue'
 
 const routes = [
   { path: '/', component: HomeView },
@@ -25,6 +26,7 @@ const routes = [
   { path: '/profile', component: ProfileView },
   { path: '/friends', component: FriendsView },
   { path: '/friend/:id', component: FriendProfileView },
+  { path: '/blocked', component: BlockedView },
 ]
 
 const router = createRouter({

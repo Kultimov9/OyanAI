@@ -12,6 +12,8 @@ export const useFriendsStore = defineStore('friends', {
     // { friendship_id, other_id, username, avatar_url, status, direction } из get_friends
     list: [],
     searchResults: [],
+    // { user_id, username, avatar_url, created_at } из list_blocked
+    blocked: [],
     userId: null,
   }),
 
@@ -148,6 +150,66 @@ export const useFriendsStore = defineStore('friends', {
       return { ok: true }
     },
 
+    // === Блокировки и жалобы ===
+    // Вся работа идёт через SQL-функции: блокировка должна одной транзакцией
+    // снять дружбу и завершить общие пары, иначе при обрыве связи останется
+    // половинчатое состояние.
+    async blockUser(otherId) {
+      if (!otherId) return { ok: false, error: 'no id' }
+      const { error } = await supabase.rpc('block_user', { p_target: otherId })
+      if (error) {
+        console.error('blockUser error:', error)
+        return { ok: false, error: error.message }
+      }
+      logEvent('user_blocked', { target: otherId })
+      // Дружба удалена на сервере — убираем и локально, не дожидаясь запроса.
+      this.list = this.list.filter((f) => f.other_id !== otherId)
+      this.searchResults = this.searchResults.filter((r) => r.id !== otherId)
+      import('./pairs')
+        .then(({ usePairsStore }) => usePairsStore().fetchPairs())
+        .catch(() => {})
+      return { ok: true }
+    },
+
+    async unblockUser(otherId) {
+      const { error } = await supabase.rpc('unblock_user', { p_target: otherId })
+      if (error) {
+        console.error('unblockUser error:', error)
+        return { ok: false, error: error.message }
+      }
+      logEvent('user_unblocked', { target: otherId })
+      this.blocked = this.blocked.filter((b) => b.user_id !== otherId)
+      return { ok: true }
+    },
+
+    async fetchBlocked() {
+      const { data, error } = await supabase.rpc('list_blocked')
+      if (error) {
+        console.log('list_blocked error:', error)
+        return
+      }
+      this.blocked = data || []
+    },
+
+    async reportUser(otherId, reason, details) {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) return { ok: false, error: 'no session' }
+      const { error } = await supabase.from('reports').insert({
+        reporter_id: user.id,
+        reported_user_id: otherId,
+        reason,
+        details: (details || '').trim() || null,
+      })
+      if (error) {
+        console.error('reportUser error:', error)
+        return { ok: false, error: error.message }
+      }
+      logEvent('user_reported', { target: otherId, reason })
+      return { ok: true }
+    },
+
     // Локальный патч по событию realtime — без полной перезагрузки списка.
     patchFriendship(row) {
       if (!row?.id) return
@@ -223,6 +285,7 @@ export const useFriendsStore = defineStore('friends', {
       }
       this.list = []
       this.searchResults = []
+      this.blocked = []
     },
   },
 })

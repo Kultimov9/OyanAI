@@ -54,6 +54,14 @@
             <span class="chevron">›</span>
           </span>
         </button>
+
+        <button class="nav-row" @click="router.push('/blocked')">
+          <span class="nav-icon"><Ban :size="18" /></span>
+          <span class="nav-label">{{ t('profile.blocked') }}</span>
+          <span class="nav-right">
+            <span class="chevron">›</span>
+          </span>
+        </button>
       </div>
 
       <p class="email">{{ store.email }}</p>
@@ -87,7 +95,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera'
-import { Users, Globe, Check } from 'lucide-vue-next'
+import { Users, Globe, Check, Ban } from 'lucide-vue-next'
 import { useHabitsStore } from '../stores/habits'
 import { useFriendsStore } from '../stores/friends'
 import { logEvent } from '../composables/useAnalytics'

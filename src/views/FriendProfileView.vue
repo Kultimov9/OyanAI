@@ -3,7 +3,13 @@
     <div class="page-header">
       <button class="back-btn" @click="router.back()">{{ t('common.back') }}</button>
       <span />
-      <span />
+      <UserActions
+        v-if="friendId"
+        class="header-actions"
+        :user-id="friendId"
+        :username="data?.username || null"
+        @blocked="onBlocked"
+      />
     </div>
 
     <div v-if="loading" class="state">{{ t('friendProfile.loading') }}</div>
@@ -115,6 +121,7 @@ import { Lock } from 'lucide-vue-next'
 import { supabase } from '../lib/supabase'
 import { logEvent } from '../composables/useAnalytics'
 import { pendingPairFriend } from '../composables/uiState'
+import UserActions from '../components/UserActions.vue'
 import { t } from '../i18n'
 
 const route = useRoute()
@@ -185,6 +192,12 @@ function pairDone(pair, userId) {
   return (pair.completions || []).some((c) => c.user_id === userId && c.date === todayStr())
 }
 
+// После блокировки профиль больше не отдаётся сервером — уводим с экрана,
+// иначе пользователь увидит ошибку загрузки вместо результата своего действия.
+function onBlocked() {
+  router.replace('/friends')
+}
+
 function inviteToPair() {
   pendingPairFriend.value = { id: friendId.value, username: data.value?.username || null }
   router.push('/habits')
@@ -208,9 +221,11 @@ async function load() {
   } catch (e) {
     // Отдельно разбираем отказ по дружбе: он ожидаемый, а не сбой.
     const msg = e?.message || String(e)
-    error.value = /not friends/i.test(msg)
-      ? t('friendProfile.onlyFriends')
-      : t('friendProfile.loadFailed')
+    error.value = /blocked/i.test(msg)
+      ? t('friendProfile.blocked')
+      : /not friends/i.test(msg)
+        ? t('friendProfile.onlyFriends')
+        : t('friendProfile.loadFailed')
     console.log('get_friend_profile error:', e)
   } finally {
     loading.value = false
@@ -241,6 +256,9 @@ watch(friendId, (id) => {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
+}
+.header-actions {
+  justify-self: end;
 }
 .back-btn {
   justify-self: start;

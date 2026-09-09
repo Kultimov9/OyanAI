@@ -40,6 +40,7 @@
             <button class="icon-btn danger" :title="t('friends.removeFriend')" @click="askRemove(f)">
               <UserMinus :size="18" />
             </button>
+            <UserActions :user-id="f.other_id" :username="f.username" />
           </div>
         </div>
         <p v-else class="empty">
@@ -76,6 +77,7 @@
             >
               {{ addLabel(r.id) }}
             </button>
+            <UserActions :user-id="r.id" :username="r.username" />
           </div>
         </div>
         <template v-else-if="query.trim() && !searching">
@@ -111,6 +113,7 @@ import { ref, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Users, UserMinus } from 'lucide-vue-next'
 import { useFriendsStore } from '../stores/friends'
+import UserActions from '../components/UserActions.vue'
 import { pendingPairFriend } from '../composables/uiState'
 import { requestPushPermissionOnce } from '../composables/usePush'
 import { useScreenRefresh } from '../composables/useScreenRefresh'
