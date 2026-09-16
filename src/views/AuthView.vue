@@ -6,7 +6,16 @@
         {{ showReset ? t('auth.resetTitle') : isLogin ? t('auth.loginTitle') : t('auth.signupTitle') }}
       </p>
 
-      <input v-model="email" type="email" class="input" placeholder="Email" autocomplete="email" />
+      <input
+        v-model="email"
+        type="email"
+        class="input"
+        placeholder="Email"
+        autocomplete="email"
+        autocapitalize="none"
+        autocorrect="off"
+        spellcheck="false"
+      />
       <input
         v-if="!showReset"
         v-model="password"
@@ -62,6 +71,11 @@ const error = ref('')
 const notice = ref('')
 const showReset = ref(false)
 
+// iOS-клавиатура умеет дописать пробел в конец, а автозамена — заглавную букву.
+// Для сервера это уже другой email, и ответ будет «Invalid login credentials»,
+// хотя пользователь ввёл всё верно.
+const cleanEmail = () => email.value.trim().toLowerCase()
+
 function openReset() {
   showReset.value = true
   error.value = ''
@@ -84,7 +98,7 @@ async function sendReset() {
   }
   loading.value = true
   try {
-    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.value, {
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(cleanEmail(), {
       redirectTo: 'https://oyan-app.netlify.app/reset-password',
     })
     if (resetError) throw resetError
@@ -108,13 +122,13 @@ async function handleAuth() {
   try {
     if (isLogin.value) {
       const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: email.value,
+        email: cleanEmail(),
         password: password.value,
       })
       if (signInError) throw signInError
     } else {
       const { data, error: signUpError } = await supabase.auth.signUp({
-        email: email.value,
+        email: cleanEmail(),
         password: password.value,
       })
       if (signUpError) throw signUpError

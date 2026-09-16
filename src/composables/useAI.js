@@ -2,6 +2,20 @@ import { useHabitsStore } from '../stores/habits'
 import { promptLang } from '../i18n'
 import { supabase } from '../lib/supabase'
 
+// ── Согласие на передачу данных в Anthropic ─────────────────────────────────
+// Требование App Store 5.1.1(i)/5.1.2(i): личные данные нельзя отправлять
+// стороннему AI-сервису, пока пользователь явно не разрешил. Проверка стоит
+// здесь, а не только в интерфейсе: так ни один путь вызова — чат, приветствие
+// на главной, генерация уведомлений — не отправит данные в обход согласия.
+export function hasAiConsent() {
+  try {
+    return Boolean(useHabitsStore().aiConsentAt)
+  } catch {
+    // Стор ещё не поднят — считаем, что согласия нет.
+    return false
+  }
+}
+
 // ── Помощники для истории поведения ─────────────────────────────────────────
 
 // Массив последних N дат в формате YYYY-MM-DD (включая сегодня), от старых к новым.
@@ -160,6 +174,7 @@ async function buildActivitySummary(store) {
 }
 
 export async function askAI(userMessage) {
+  if (!hasAiConsent()) throw new Error('ai_consent_required')
   const store = useHabitsStore()
   const today = new Date().toISOString().split('T')[0]
 
@@ -266,6 +281,8 @@ ${activitySummary}
 // Персональное приветствие на главном экране (первый контакт после онбординга).
 // Тёплый наставник: упоминает конкретную привычку и зовёт сделать микро-шаг.
 export async function generateGreeting({ habitName, duration } = {}) {
+  // Приветствие — не главная функция экрана, поэтому без согласия просто молчим.
+  if (!hasAiConsent()) return ''
   const store = useHabitsStore()
   const today = new Date().toISOString().split('T')[0]
 
@@ -332,6 +349,9 @@ export async function generateGreeting({ habitName, duration } = {}) {
 }
 
 export async function generateNotifications() {
+  // Без согласия ИИ-напоминаний нет. Утреннее и вечернее остаются: они
+  // планируются на устройстве и наружу ничего не отправляют.
+  if (!hasAiConsent()) return []
   const store = useHabitsStore()
   const today = new Date().toISOString().split('T')[0]
   const completedToday = store.habits.filter((h) => h.completedDates.includes(today))

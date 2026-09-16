@@ -30,6 +30,22 @@
       ],
       "port": 5179,
       "autoPort": false
+    },
+    {
+      "name": "oyan-app-screenshots",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "NO_DEVTOOLS=1",
+        "npm",
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "5199",
+        "--strictPort"
+      ],
+      "port": 5199,
+      "autoPort": false
     }
   ]
 }

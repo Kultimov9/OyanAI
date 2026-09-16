@@ -22,6 +22,9 @@ export const useHabitsStore = defineStore('habits', {
     // Час, в который пользователь обычно активен. Считается на сервере раз в
     // неделю; null — данных мало, работают дефолтные времена напоминаний.
     activeHour: null,
+    // Согласие на передачу данных в Anthropic (App Store 5.1.1(i)/5.1.2(i)).
+    // Источник истины — profiles.ai_consent_at, здесь зеркало для проверок.
+    aiConsentAt: null,
     username: null,
     avatarUrl: null,
     habits: [],
@@ -131,6 +134,7 @@ export const useHabitsStore = defineStore('habits', {
       // интерфейс открылся на том же языке. Ручной выбор на устройстве важнее.
       applyProfileLocale(profileRes.data?.lang)
       this.activeHour = profileRes.data?.active_hour ?? null
+      this.aiConsentAt = profileRes.data?.ai_consent_at ?? null
 
       // Парные привычки — грузим отдельным стором, не блокируя роутинг.
       import('./pairs')
@@ -200,6 +204,43 @@ export const useHabitsStore = defineStore('habits', {
       this.goals = []
       this.reflections = []
       this.onboarded = false
+      this.aiConsentAt = null
+    },
+
+    // Согласие на отправку данных в Anthropic. Храним в профиле, а не только
+    // локально: иначе на втором устройстве или после переустановки данные
+    // ушли бы без спроса.
+    async setAiConsent(granted) {
+      const at = granted ? new Date().toISOString() : null
+      const { error } = await supabase
+        .from('profiles')
+        .upsert({ id: this.userId, ai_consent_at: at })
+      if (error) {
+        console.error('setAiConsent error:', error)
+        return { ok: false, error: error.message }
+      }
+      this.aiConsentAt = at
+      logEvent(granted ? 'ai_consent_granted' : 'ai_consent_revoked', {})
+      return { ok: true }
+    },
+
+    // Удаление аккаунта (требование App Store 5.1.1(v)).
+    // Данные сносит Edge Function под service_role: клиенту такие права не дать,
+    // а auth.admin.deleteUser иначе недоступен. Кого удалять, функция берёт из
+    // токена, поэтому id отсюда не передаём.
+    async deleteAccount() {
+      const { data, error } = await supabase.functions.invoke('delete-account', { body: {} })
+      if (error) {
+        console.error('deleteAccount error:', error)
+        return { ok: false, error: error.message || t('profile.deleteFailed') }
+      }
+      if (!data?.ok) {
+        return { ok: false, error: data?.error || t('profile.deleteFailed') }
+      }
+      // Аккаунта уже нет, но локальное состояние и сохранённая сессия остались —
+      // переиспользуем обычный выход, чтобы почистить всё то же самое.
+      await this.logout()
+      return { ok: true }
     },
 
     // === Профиль ===

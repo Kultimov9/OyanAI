@@ -4,7 +4,12 @@
       <h1 class="title">{{ t('ai.title') }}</h1>
       <p class="subtitle">{{ t('ai.subtitle') }}</p>
     </div>
-    <div class="content">
+    <!-- Без согласия чат недоступен: любой запрос отправил бы данные в Anthropic. -->
+    <!-- После выдачи согласия компонент размонтируется сам (v-if), поэтому
+         обработчик granted здесь не нужен: факт согласия пишется в сторе. -->
+    <AiConsent v-if="!store.aiConsentAt" @decline="router.back()" />
+
+    <div v-else class="content">
       <div class="messages" ref="messagesEl">
         <div v-if="messages.length === 0" class="empty">
           <p class="empty-emoji">🤖</p>
@@ -62,12 +67,16 @@
 <script setup>
 import { t } from '../i18n'
 import { ref, nextTick, onMounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { Send } from 'lucide-vue-next'
 import { askAI } from '../composables/useAI'
 import { useHabitsStore } from '../stores/habits'
+import AiConsent from '../components/AiConsent.vue'
 import { logEvent } from '../composables/useAnalytics'
 
+const router = useRouter()
 const store = useHabitsStore()
+
 const messages = ref([])
 const input = ref('')
 const loading = ref(false)

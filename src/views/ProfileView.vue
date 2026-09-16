@@ -62,11 +62,65 @@
             <span class="chevron">›</span>
           </span>
         </button>
+
+        <!-- Управление согласием на передачу данных в Anthropic -->
+        <button class="nav-row" @click="openAi">
+          <span class="nav-icon"><Sparkles :size="18" /></span>
+          <span class="nav-label">{{ t('profile.aiData') }}</span>
+          <span class="nav-right">
+            <span class="nav-value">
+              {{ store.aiConsentAt ? t('profile.aiAllowed') : t('profile.aiDenied') }}
+            </span>
+            <span class="chevron">›</span>
+          </span>
+        </button>
       </div>
 
       <p class="email">{{ store.email }}</p>
 
       <button class="logout-btn" @click="logout">{{ t('profile.logout') }}</button>
+      <button class="delete-btn" @click="showDelete = true">{{ t('profile.deleteAccount') }}</button>
+    </div>
+
+    <!-- Согласие на передачу данных в AI: выдать или отозвать.
+         Вид окна выбирается один раз при открытии (aiMode), а не реактивно по
+         store.aiConsentAt: иначе сразу после выдачи согласия окно перерисуется
+         в вариант «Отозвать» прямо под пользователем. -->
+    <div v-if="aiMode" class="modal-overlay" @click="closeAi">
+      <div class="modal wide" @click.stop>
+        <template v-if="aiMode === 'revoke'">
+          <p class="modal-title">{{ t('profile.aiData') }}</p>
+          <p class="modal-desc">{{ t('profile.aiRevokeDesc') }}</p>
+          <div class="modal-actions">
+            <button class="modal-cancel" :disabled="aiBusy" @click="closeAi">
+              {{ t('common.cancel') }}
+            </button>
+            <button class="modal-confirm" :disabled="aiBusy" @click="revokeAi">
+              {{ t('profile.aiRevoke') }}
+            </button>
+          </div>
+        </template>
+        <AiConsent v-else @granted="closeAi" @decline="closeAi" />
+      </div>
+    </div>
+
+    <!-- Удаление аккаунта: необратимое действие, поэтому с подтверждением
+         и перечислением того, что именно пропадёт. -->
+    <div v-if="showDelete" class="modal-overlay" @click="closeDelete">
+      <div class="modal" @click.stop>
+        <p class="modal-title">{{ t('profile.deleteTitle') }}</p>
+        <p class="modal-desc">{{ t('profile.deleteDesc') }}</p>
+        <p class="modal-desc warn">{{ t('profile.deleteWarn') }}</p>
+        <p v-if="deleteError" class="modal-error">{{ deleteError }}</p>
+        <div class="modal-actions">
+          <button class="modal-cancel" :disabled="deleting" @click="closeDelete">
+            {{ t('common.cancel') }}
+          </button>
+          <button class="modal-confirm" :disabled="deleting" @click="confirmDelete">
+            {{ deleting ? t('profile.deleting') : t('profile.deleteConfirm') }}
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- Выбор языка -->
@@ -95,9 +149,10 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera'
-import { Users, Globe, Check, Ban } from 'lucide-vue-next'
+import { Users, Globe, Check, Ban, Sparkles } from 'lucide-vue-next'
 import { useHabitsStore } from '../stores/habits'
 import { useFriendsStore } from '../stores/friends'
+import AiConsent from '../components/AiConsent.vue'
 import { logEvent } from '../composables/useAnalytics'
 import { t, locale, setLocale, localeLabel, LOCALES } from '../i18n'
 import { useScreenRefresh } from '../composables/useScreenRefresh'
@@ -107,6 +162,52 @@ const store = useHabitsStore()
 const friends = useFriendsStore()
 
 const showLangPicker = ref(false)
+
+// null — окно закрыто, 'grant' — экран согласия, 'revoke' — подтверждение отзыва.
+const aiMode = ref(null)
+const aiBusy = ref(false)
+
+function openAi() {
+  aiMode.value = store.aiConsentAt ? 'revoke' : 'grant'
+}
+
+function closeAi() {
+  if (aiBusy.value) return
+  aiMode.value = null
+}
+
+async function revokeAi() {
+  aiBusy.value = true
+  await store.setAiConsent(false)
+  aiBusy.value = false
+  aiMode.value = null
+}
+
+const showDelete = ref(false)
+const deleting = ref(false)
+const deleteError = ref('')
+
+function closeDelete() {
+  if (deleting.value) return
+  showDelete.value = false
+  deleteError.value = ''
+}
+
+async function confirmDelete() {
+  deleting.value = true
+  deleteError.value = ''
+  // Событие пишем до удаления: после него строки в events уже не будет.
+  logEvent('account_delete_requested', {})
+  const res = await store.deleteAccount()
+  deleting.value = false
+  if (!res.ok) {
+    // Окно не закрываем: иначе непонятно, почему аккаунт на месте.
+    deleteError.value = res.error
+    return
+  }
+  showDelete.value = false
+  router.replace('/auth')
+}
 
 function chooseLang(code) {
   setLocale(code)
@@ -435,5 +536,71 @@ async function logout() {
   font-size: 15px;
   cursor: pointer;
   padding: 12px;
+}
+/* Удаление аккаунта необратимо, поэтому цветом отделено от выхода,
+   но приглушённым — чтобы не тянуло нажать по ошибке. */
+.delete-btn {
+  background: none;
+  border: none;
+  color: #ef4444;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 8px 12px 24px;
+}
+/* Экран согласия шире обычного диалога: в нём два списка. */
+.modal.wide {
+  max-width: 360px;
+  padding: 0;
+}
+.modal.wide .modal-title,
+.modal.wide .modal-desc,
+.modal.wide .modal-actions {
+  padding-left: 20px;
+  padding-right: 20px;
+}
+.modal.wide .modal-title {
+  padding-top: 20px;
+}
+.modal.wide .modal-actions {
+  padding-bottom: 20px;
+}
+.modal-desc {
+  font-size: 14px;
+  line-height: 1.5;
+  color: #9a9a92;
+  margin: 0;
+}
+.modal-desc.warn {
+  color: #ef4444;
+}
+.modal-error {
+  font-size: 13px;
+  line-height: 1.45;
+  color: #ef4444;
+  margin: 4px 0 0;
+}
+.modal-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+.modal-actions .modal-cancel {
+  flex: 1;
+  margin: 0;
+}
+.modal-confirm {
+  flex: 1;
+  background: #ef4444;
+  border: none;
+  color: #ffffff;
+  border-radius: 12px;
+  padding: 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.modal-cancel:disabled,
+.modal-confirm:disabled {
+  opacity: 0.6;
 }
 </style>
