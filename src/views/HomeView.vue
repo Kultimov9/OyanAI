@@ -13,7 +13,12 @@
           {{ t('home.addFirstHabit') }}
         </button>
         <button v-else class="ai-greet-primary" @click="startTarget">
-          {{ t('home.startMinutes', { n: targetHabit?.duration }) }}
+          {{
+            t('home.startMinutes', {
+              n: targetHabit?.duration,
+              word: plural(targetHabit?.duration || 0, 'home.minuteWord'),
+            })
+          }}
         </button>
         <button v-if="noHabits" class="ai-greet-secondary" @click="noHabitsHidden = true">
           {{ t('home.notNow') }}
@@ -237,6 +242,7 @@ onMounted(async () => {
     const text = await generateGreeting({
       habitName: target.name,
       duration: target.duration,
+      habitId: target.id,
     })
     if (text) {
       greetingText.value = text

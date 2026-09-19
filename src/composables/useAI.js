@@ -238,7 +238,7 @@ export async function askAI(userMessage) {
 - Всего привычек: ${store.habits.length}
 - Выполнено сегодня: ${completedToday.map((h) => h.name).join(', ') || 'пока ничего'}
 - Осталось сегодня: ${pendingToday.map((h) => h.name).join(', ') || 'все выполнены'}
-- Лучший streak: ${bestStreak} дней
+- Лучшая текущая серия среди всех привычек: ${bestStreak} дней
 
 ${habitsHistory}
 
@@ -280,7 +280,7 @@ ${activitySummary}
 
 // Персональное приветствие на главном экране (первый контакт после онбординга).
 // Тёплый наставник: упоминает конкретную привычку и зовёт сделать микро-шаг.
-export async function generateGreeting({ habitName, duration } = {}) {
+export async function generateGreeting({ habitName, duration, habitId } = {}) {
   // Приветствие — не главная функция экрана, поэтому без согласия просто молчим.
   if (!hasAiConsent()) return ''
   const store = useHabitsStore()
@@ -288,7 +288,15 @@ export async function generateGreeting({ habitName, duration } = {}) {
 
   const completedToday = store.habits.filter((h) => h.completedDates.includes(today))
   const allHabits = store.habits.map((h) => h.name).join(', ') || 'нет привычек'
-  const bestStreak = Math.max(0, ...store.habits.map((h) => h.streak))
+
+  // Серия считается по ТОЙ привычке, о которой пойдёт речь. Раньше сюда шёл
+  // максимум по всем привычкам сразу — и модель приписывала чужой рекорд
+  // названной привычке («55 дней подряд чистил зубы», хотя это про английский).
+  const target = habitId ? store.habits.find((h) => h.id === habitId) : null
+  const targetBest = target ? bestStreakOf(target.completedDates) : 0
+  // Строку с серией добавляем, только если серия была: иначе модель начнёт
+  // обыгрывать «0 дней подряд».
+  const streakLine = targetBest > 1 ? `\n- Лучшая серия по этой привычке: ${targetBest} дней подряд` : ''
 
   // Кейс «нет ни одной привычки»: мягкий вопрос, что человек чаще откладывает,
   // и предложение начать с одного маленького шага.
@@ -303,11 +311,13 @@ export async function generateGreeting({ habitName, duration } = {}) {
 2. Упомяни КОНКРЕТНУЮ привычку: "${habitName}".
 3. Дай короткий тёплый инсайт, почему даже малый шаг сегодня важен.
 4. Мягко позови начать прямо сейчас (${duration} минут).
+5. Используй только те цифры, что даны ниже. Числа из контекста относятся
+   к привычке "${habitName}" — не приписывай ей достижения других привычек
+   и не выдумывай новые цифры.
 
 Контекст:
 - Привычки пользователя: ${allHabits}
-- Сегодня уже выполнено: ${completedToday.map((h) => h.name).join(', ') || 'пока ничего'}
-- Лучший streak: ${bestStreak} дней
+- Сегодня уже выполнено: ${completedToday.map((h) => h.name).join(', ') || 'пока ничего'}${streakLine}
 `
     : `
 Ты — личный наставник пользователя в приложении Oyan. Тон: тёплый, спокойный, поддерживающий.

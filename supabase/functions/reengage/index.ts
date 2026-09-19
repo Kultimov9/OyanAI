@@ -5,7 +5,7 @@
 // AI) выполнялись только для тех, кому пуш реально можно отправить.
 
 import { admin, sendPush, checkSecret, json } from '../_shared/push.ts'
-import { dict, fill, langOf } from '../_shared/i18n.ts'
+import { dict, fill, langOf, plural } from '../_shared/i18n.ts'
 import { canSend, logPush, unlogPush } from '../_shared/limits.ts'
 
 // Часовой пояс пользователей. Пока один для всех — см. ТЗ.
@@ -67,7 +67,14 @@ function bestStreak(dates: string[]): number {
 const halfDuration = (d: number | null) => Math.max(2, Math.floor((d || 5) / 2))
 
 function fallbackText(lang: string, name: string, idleDays: number, minutes: number) {
-  return fill(dict(lang).reengageFallback, { habit: name, days: idleDays, minutes })
+  const d = dict(lang)
+  return fill(d.reengageFallback, {
+    habit: name,
+    days: idleDays,
+    dayWord: plural(idleDays, d.dayWord),
+    minutes,
+    minuteWord: plural(minutes, d.minuteWord),
+  })
 }
 
 async function aiText(ctx: {
@@ -135,6 +142,23 @@ async function aiText(ctx: {
   }
 }
 
+// Согласие на передачу данных в Anthropic (App Store 5.1.1(i)/5.1.2(i)).
+// Без него название привычки и текст рефлексии в AI не уходят — пуш получает
+// заготовленный текст. При ошибке чтения считаем, что согласия нет: лучше
+// отправить шаблон, чем данные без разрешения.
+async function hasAiConsent(db: ReturnType<typeof admin>, userId: string): Promise<boolean> {
+  const { data, error } = await db
+    .from('profiles')
+    .select('ai_consent_at')
+    .eq('id', userId)
+    .maybeSingle()
+  if (error) {
+    console.error('ai consent read failed', error)
+    return false
+  }
+  return Boolean(data?.ai_consent_at)
+}
+
 // Текст от AI кэшируется на сутки: за день на пользователя допускается не
 // больше одной генерации. Ошибка кэша не должна ронять отправку — при сбое
 // просто сгенерируем заново.
@@ -183,7 +207,9 @@ Deno.serve(async (req) => {
 
   const db = admin()
   const today = localDate(now)
-  const stats = { checked: 0, sent: 0, skipped: {} as Record<string, number> }
+  // noConsent — пуши, отправленные с шаблонным текстом из-за отсутствия согласия
+  // на AI. Это не пропуск: уведомление всё равно уходит.
+  const stats = { checked: 0, sent: 0, noConsent: 0, skipped: {} as Record<string, number> }
   const skip = (reason: string) => {
     stats.skipped[reason] = (stats.skipped[reason] || 0) + 1
   }
@@ -270,27 +296,34 @@ Deno.serve(async (req) => {
     const pick = candidates[0]
     const minutes = halfDuration(pick.habit.duration)
 
-    // Рефлексия за последнюю неделю — чтобы AI мог мягко сослаться на неё.
-    const weekAgo = new Date(now.getTime() - 7 * DAY_MS).toISOString().split('T')[0]
-    const { data: refl } = await db
-      .from('reflections')
-      .select('note, date')
-      .eq('user_id', userId)
-      .gte('date', weekAgo)
-      .order('date', { ascending: false })
-      .limit(1)
-
     // Язык получателя: и промпт, и заготовка должны быть на нём.
     const lang = await langOf(db, userId)
-    const text =
-      (await cachedAiText(db, userId, lang, {
+
+    let aiGenerated: string | null = null
+    if (await hasAiConsent(db, userId)) {
+      // Рефлексия за последнюю неделю — чтобы AI мог мягко сослаться на неё.
+      // Читаем только при согласии: без него она никуда не отправляется.
+      const weekAgo = new Date(now.getTime() - 7 * DAY_MS).toISOString().split('T')[0]
+      const { data: refl } = await db
+        .from('reflections')
+        .select('note, date')
+        .eq('user_id', userId)
+        .gte('date', weekAgo)
+        .order('date', { ascending: false })
+        .limit(1)
+
+      aiGenerated = await cachedAiText(db, userId, lang, {
         lang,
         name: pick.habit.name,
         idleDays: pick.idleDays,
         best: pick.best,
         minutes,
         reflection: refl?.[0]?.note || null,
-      })) || fallbackText(lang, pick.habit.name, pick.idleDays, minutes)
+      })
+    } else {
+      stats.noConsent++
+    }
+    const text = aiGenerated || fallbackText(lang, pick.habit.name, pick.idleDays, minutes)
 
     // Строку журнала создаём до отправки: её id уходит в payload, чтобы клиент
     // мог отметить открытие.
