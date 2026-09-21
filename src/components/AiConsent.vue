@@ -41,7 +41,9 @@
 <script setup>
 import { ref } from 'vue'
 import { useHabitsStore } from '../stores/habits'
-import { t } from '../i18n'
+// Экран показывается на английском, если система устройства не русская и не
+// казахская: это раскрытие данных, и его должен понимать тот, кто читает.
+import { tConsent as t } from '../i18n'
 
 const emit = defineEmits(['granted', 'decline'])
 

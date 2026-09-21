@@ -745,6 +745,56 @@ function detect() {
   return saved && messages[saved] ? saved : DEFAULT_LOCALE
 }
 
+// Экран согласия на передачу данных в AI — единственное место, где нужен
+// английский. Это юридическое раскрытие, и читает его не только владелец
+// телефона: проверяющий из App Review работает на англоязычном устройстве и
+// русский текст как раскрытие данных не опознаёт. Остальной интерфейс
+// остаётся на русском и казахском.
+const CONSENT_EN = {
+  aiConsent: {
+    title: 'The AI coach is powered by Claude',
+    lead: 'To give you personal advice, the app sends part of your data to Anthropic (Claude), a third-party AI service located in the USA.',
+    sentLabel: 'What is sent',
+    sentItems: [
+      'Habit names and completion records',
+      'The text of your tasks and goals',
+      'The text of your reflections and your mood',
+    ],
+    notSentLabel: 'What is never sent',
+    notSentItems: ['Email and password', 'Account identifier', 'Avatar and data about your friends'],
+    note: 'This data is used only to generate a response and is not used to train models. You can withdraw this permission at any time in your profile.',
+    policy: 'Privacy policy',
+    allow: 'Allow and continue',
+    later: 'Not now',
+    saving: 'Saving…',
+    failed: 'Could not save.',
+  },
+}
+
+// Язык экрана согласия определяется системой устройства, а не выбором внутри
+// приложения: важно, на каком языке читает тот, кто держит телефон в руках.
+function consentLang() {
+  let sys = ''
+  try {
+    sys = (navigator.language || '').toLowerCase()
+  } catch {
+    // нет доступа к navigator — остаёмся на языке приложения
+  }
+  // Язык не определился — остаёмся на языке приложения: показать англичанину
+  // русский текст не страшно, а наоборот — заметный регресс для своих.
+  if (!sys) return locale.value
+  return sys.startsWith('ru') || sys.startsWith('kk') ? locale.value : 'en'
+}
+
+// Тот же t(), но со словарём экрана согласия.
+export function tConsent(path, params) {
+  const dict = consentLang() === 'en' ? CONSENT_EN : messages[locale.value] || messages.ru
+  const val = path.split('.').reduce((o, k) => (o == null ? undefined : o[k]), dict)
+  if (val === undefined) return path
+  if (!params) return val
+  return String(val).replace(/\{(\w+)\}/g, (m, k) => (k in params ? params[k] : m))
+}
+
 // Название текущего языка для строки в профиле.
 // Язык ответа модели для AI-промптов. Сама инструкция остаётся на русском:
 // промпты написаны по-русски, и так модели однозначнее, чем при смешении языков.
