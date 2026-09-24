@@ -113,11 +113,12 @@ async function sendMessage(text) {
     const reply = await askAI(msg)
     messages.value.push({ id: Date.now() + 1, role: 'assistant', text: reply })
     store.saveAIMessages(messages.value)
-  } catch {
+  } catch (e) {
+    // Суточный лимит — отдельный текст: «проверь интернет» тут только запутает.
     messages.value.push({
       id: Date.now() + 1,
       role: 'assistant',
-      text: t('ai.error'),
+      text: e?.message === 'ai_limit' ? t('ai.limit') : t('ai.error'),
     })
   }
 

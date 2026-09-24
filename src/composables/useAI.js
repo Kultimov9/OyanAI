@@ -16,6 +16,30 @@ export function hasAiConsent() {
   }
 }
 
+// ── Запрос к Claude ─────────────────────────────────────────────────────────
+// Все обращения идут через Edge Function `ai`: ключ API хранится только на
+// сервере, в приложении его нет. Клиент передаёт тип запроса, системный промпт
+// и сообщение; модель и лимит токенов выбирает сервер.
+// Ошибка пробрасывается с кодом из ответа функции (например, 'ai_limit'),
+// чтобы экран мог показать понятный текст.
+async function callClaude(kind, system, message) {
+  const { data, error } = await supabase.functions.invoke('ai', {
+    body: { kind, system, message },
+  })
+  if (error) {
+    // У ответов не из 2xx тело с кодом ошибки лежит в error.context.
+    let code = ''
+    try {
+      code = (await error.context?.json())?.error || ''
+    } catch {
+      // тело не JSON — останется общий код
+    }
+    throw new Error(code || 'ai_failed')
+  }
+  if (!data?.text) throw new Error('ai_empty')
+  return data.text
+}
+
 // ── Помощники для истории поведения ─────────────────────────────────────────
 
 // Массив последних N дат в формате YYYY-MM-DD (включая сегодня), от старых к новым.
@@ -254,24 +278,7 @@ ${recentReflections}
 ${activitySummary}
 `
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': import.meta.env.VITE_ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
-    body: JSON.stringify({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1000,
-      system: context,
-      messages: [{ role: 'user', content: userMessage }],
-    }),
-  })
-
-  const data = await response.json()
-  const text = data.content[0].text
+  const text = await callClaude('chat', context, userMessage)
   return text
     .replace(/\*\*(.*?)\*\*/g, '$1')
     .replace(/\*(.*?)\*/g, '$1')
@@ -332,25 +339,7 @@ export async function generateGreeting({ habitName, duration, habitId } = {}) {
 Не дави, не перечисляй списком, звучи по-человечески.
 `
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': import.meta.env.VITE_ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
-    body: JSON.stringify({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 300,
-      system: context,
-      messages: [{ role: 'user', content: 'Поприветствуй меня.' }],
-    }),
-  })
-
-  const data = await response.json()
-  const text = data.content?.[0]?.text
-  if (!text) throw new Error('empty greeting')
+  const text = await callClaude('greeting', context, 'Поприветствуй меня.')
   return text
     .replace(/\*\*(.*?)\*\*/g, '$1')
     .replace(/\*(.*?)\*/g, '$1')
@@ -432,24 +421,7 @@ ${lastReflection ? `- Последняя рефлексия (${lastReflection.da
 ]
 `
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': import.meta.env.VITE_ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
-    body: JSON.stringify({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 500,
-      system: context,
-      messages: [{ role: 'user', content: 'Придумай уведомления для меня на сегодня' }],
-    }),
-  })
-
-  const data = await response.json()
-  const text = data.content[0].text
+  const text = await callClaude('notifications', context, 'Придумай уведомления для меня на сегодня')
   const clean = text.replace(/```json|```/g, '').trim()
   const parsed = JSON.parse(clean)
 

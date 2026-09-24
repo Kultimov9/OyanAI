@@ -25,7 +25,7 @@ npx cap open android  # Opens Android Studio
 Copy `.env` and set:
 - `VITE_SUPABASE_URL` — Supabase project URL
 - `VITE_SUPABASE_ANON_KEY` — Supabase anon key
-- `VITE_ANTHROPIC_API_KEY` — Anthropic API key (used directly from the browser via `anthropic-dangerous-direct-browser-access`)
+The Anthropic API key is **not** a client variable: it lives only in the Supabase secret `ANTHROPIC_API_KEY`, used by the `ai` and `reengage` Edge Functions. Never add it back to `.env` — Vite would embed it in the app bundle.
 
 ## Path alias
 
@@ -50,9 +50,12 @@ The router guard checks the Supabase session on every navigation:
 - Session on `/auth` → redirect to `/`
 
 ### AI (`src/composables/useAI.js`)
-Two exported functions both call `claude-opus-4-5` directly from the browser:
-- `askAI(message)` — chat with a personal coach that has full context of today's habits, tasks, goals, and the latest reflection. Prompts and responses are in Russian.
+All Claude calls go through the `ai` Edge Function (`supabase/functions/ai`) via `callClaude(kind, system, message)`. The client builds the prompt; the server picks the model (`claude-haiku-4-5`) and token limit per `kind`, checks `profiles.ai_consent_at`, and enforces a daily per-user cap through the `ai_usage` table (`supabase/ai_usage.sql`). A `429` with `ai_limit` means the cap is reached.
+- `askAI(message)` — chat with a personal coach that has full context of today's habits, tasks, goals, and the latest reflection.
+- `generateGreeting()` — short personal greeting on the home screen.
 - `generateNotifications()` — returns a JSON array of `{id, hour, minute, text}` objects used to schedule daily local notifications.
+
+Every entry point first checks `hasAiConsent()`: no data is sent to Anthropic without the user's explicit consent (App Store 5.1.1(i)/5.1.2(i)).
 
 AI chat history is stored in the Pinia store (`aiMessages`, `aiMessagesDate`) and cleared daily.
 
