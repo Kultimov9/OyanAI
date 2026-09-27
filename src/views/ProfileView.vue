@@ -63,6 +63,16 @@
           </span>
         </button>
 
+        <!-- Анти-скролл: настройка перехвата через «Команды». Только iOS —
+             на Android такого приложения нет. -->
+        <button v-if="antiScroll" class="nav-row" @click="router.push('/antiscroll')">
+          <span class="nav-icon"><Hand :size="18" /></span>
+          <span class="nav-label">{{ t('profile.antiscroll') }}</span>
+          <span class="nav-right">
+            <span class="chevron">›</span>
+          </span>
+        </button>
+
         <!-- Управление согласием на передачу данных в Anthropic -->
         <button class="nav-row" @click="openAi">
           <span class="nav-icon"><Sparkles :size="18" /></span>
@@ -149,10 +159,11 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera'
-import { Users, Globe, Check, Ban, Sparkles } from 'lucide-vue-next'
+import { Users, Globe, Check, Ban, Sparkles, Hand } from 'lucide-vue-next'
 import { useHabitsStore } from '../stores/habits'
 import { useFriendsStore } from '../stores/friends'
 import AiConsent from '../components/AiConsent.vue'
+import { antiScrollSupported } from '../composables/useAntiScroll'
 import { logEvent } from '../composables/useAnalytics'
 import { t, locale, setLocale, localeLabel, LOCALES } from '../i18n'
 import { useScreenRefresh } from '../composables/useScreenRefresh'
@@ -162,6 +173,7 @@ const store = useHabitsStore()
 const friends = useFriendsStore()
 
 const showLangPicker = ref(false)
+const antiScroll = antiScrollSupported()
 
 // null — окно закрыто, 'grant' — экран согласия, 'revoke' — подтверждение отзыва.
 const aiMode = ref(null)

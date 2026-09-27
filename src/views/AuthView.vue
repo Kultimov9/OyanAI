@@ -54,14 +54,22 @@
 <script setup>
 import { t } from '../i18n'
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { supabase } from '../lib/supabase'
 import { useHabitsStore } from '../stores/habits'
 import { logLoginEvent } from '../lib/loginEvents'
 import logoUrl from '@/assets/logo-wordmark.png'
 
 const router = useRouter()
+const route = useRoute()
 const store = useHabitsStore()
+
+// Куда вернуть после входа. Принимаем только экран перехвата: произвольный
+// адрес из ссылки превратил бы вход в открытый редирект.
+function afterLoginPath() {
+  const r = route.query.redirect
+  return typeof r === 'string' && r.startsWith('/wake') ? r : '/'
+}
 
 const email = ref('')
 const password = ref('')
@@ -159,7 +167,7 @@ async function handleAuth() {
     await store.ensureLoaded(true)
 
     if (store.habits.length > 0 || store.onboarded) {
-      router.replace('/')
+      router.replace(afterLoginPath())
     } else {
       router.replace('/onboarding')
     }

@@ -74,6 +74,18 @@
     </div>
 
     <button class="secondary-btn" @click="router.push('/habits')">{{ t('home.allHabits') }}</button>
+
+    <!-- Анонс анти-скролла: показывается один раз, пока не закроют или не
+         перейдут в настройку. Ниже основных действий, чтобы не спорить с ними. -->
+    <div v-if="showAntiScrollAnnounce" class="announce">
+      <div class="announce-body" role="button" tabindex="0" @click="openAntiScroll" @keydown.enter="openAntiScroll">
+        <span class="announce-badge">{{ t('home.antiscrollBadge') }}</span>
+        <p class="announce-title">{{ t('home.antiscrollTitle') }}</p>
+        <p class="announce-text">{{ t('home.antiscrollText') }}</p>
+        <span class="announce-cta">{{ t('home.antiscrollCta') }} →</span>
+      </div>
+      <button class="announce-close" :aria-label="t('common.cancel')" @click="dismissAntiScroll">×</button>
+    </div>
     <div
       v-if="!noHabits"
       class="challenge-card"
@@ -123,9 +135,23 @@ import { generateGreeting } from '../composables/useAI'
 import { scheduleEveningReminder } from '../composables/useNotifications'
 import { noHabitsBannerHidden as noHabitsHidden } from '../composables/uiState'
 import logoUrl from '@/assets/logo-wordmark.png'
+import { antiScrollSupported, announceSeen, markAnnounceSeen } from '../composables/useAntiScroll'
 
 const router = useRouter()
 const store = useHabitsStore()
+
+// Анонс анти-скролла: только на iOS и только пока не видели.
+const showAntiScrollAnnounce = ref(antiScrollSupported() && !announceSeen())
+
+function dismissAntiScroll() {
+  markAnnounceSeen()
+  showAntiScrollAnnounce.value = false
+}
+
+function openAntiScroll() {
+  dismissAntiScroll()
+  router.push('/antiscroll')
+}
 
 // Данные могли измениться на другом устройстве — обновляем при каждом входе.
 useScreenRefresh(() => store.refresh())
@@ -524,6 +550,61 @@ const challengeProgress = computed(() => {
   color: #9a9a92;
   cursor: pointer;
   margin-top: 8px;
+}
+.announce {
+  position: relative;
+  background: #141414;
+  border: 1px solid #242424;
+  border-radius: 16px;
+}
+.announce-body {
+  padding: 16px 44px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  cursor: pointer;
+}
+.announce-badge {
+  align-self: flex-start;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #0a0a0a;
+  background: #f5f0e8;
+  border-radius: 999px;
+  padding: 3px 8px;
+}
+.announce-title {
+  margin: 4px 0 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #f5f0e8;
+}
+.announce-text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #9a9a92;
+}
+.announce-cta {
+  margin-top: 4px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #f5f0e8;
+}
+.announce-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 32px;
+  height: 32px;
+  background: none;
+  border: none;
+  color: #5a5a55;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
 }
 .challenge-card {
   background: #1a1a1a;

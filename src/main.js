@@ -2,6 +2,7 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import piniaPluginPersistedstate from 'pinia-plugin-persistedstate'
 import { Capacitor } from '@capacitor/core'
+import { SplashScreen } from '@capacitor/splash-screen'
 import router from './router'
 import App from './App.vue'
 import './style.css'
@@ -15,6 +16,14 @@ const pinia = createPinia()
 pinia.use(piniaPluginPersistedstate)
 
 createApp(App).use(pinia).use(router).mount('#app')
+
+// Заставку скрываем, как только приложение смонтировалось, а не через
+// фиксированные 2 секунды: при открытии из автоматизации «Команд» (анти-скролл)
+// каждая лишняя секунда перед экраном перехвата особенно заметна.
+// Кадр ожидания — чтобы успел отрисоваться тёмный фон, а не пустой WebView.
+requestAnimationFrame(() => {
+  SplashScreen.hide().catch(() => {})
+})
 
 // Отключить bounce на iOS
 document.addEventListener(

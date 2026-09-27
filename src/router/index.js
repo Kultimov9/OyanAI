@@ -13,6 +13,8 @@ import ProfileView from '../views/ProfileView.vue'
 import FriendsView from '../views/FriendsView.vue'
 import FriendProfileView from '../views/FriendProfileView.vue'
 import BlockedView from '../views/BlockedView.vue'
+import WakeView from '../views/WakeView.vue'
+import AntiScrollView from '../views/AntiScrollView.vue'
 
 const routes = [
   { path: '/', component: HomeView },
@@ -27,6 +29,8 @@ const routes = [
   { path: '/friends', component: FriendsView },
   { path: '/friend/:id', component: FriendProfileView },
   { path: '/blocked', component: BlockedView },
+  { path: '/wake', component: WakeView },
+  { path: '/antiscroll', component: AntiScrollView },
 ]
 
 const router = createRouter({
@@ -42,6 +46,9 @@ router.beforeEach(async (to) => {
   } = await supabase.auth.getSession()
 
   if (!session && to.path !== '/auth') {
+    // Перехват открыт без входа: после авторизации вернём на тот же экран
+    // с тем же приложением, иначе смысл перехвата теряется.
+    if (to.path === '/wake') return { path: '/auth', query: { redirect: to.fullPath } }
     return '/auth'
   }
 
@@ -53,6 +60,13 @@ router.beforeEach(async (to) => {
   // после переустановки (пустой localStorage) onboarded=false уведёт на онбординг
   // ещё до загрузки реальных данных аккаунта.
   if (session) {
+    // Экран перехвата должен появиться сразу, пока человек не ушёл в ленту.
+    // Если данные уже есть на телефоне, сеть не ждём — свежие подтянутся фоном.
+    if (to.path === '/wake' && store.habits.length) {
+      store.ensureLoaded().catch(() => {})
+      return
+    }
+
     await store.ensureLoaded()
 
     const needsOnboarding = store.habits.length === 0 && !store.onboarded

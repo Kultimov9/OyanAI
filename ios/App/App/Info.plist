@@ -16,6 +16,16 @@
 	<array>
 		<string>remote-notification</string>
 	</array>
+	<!-- Анти-скролл: приложения, в которые Oyan возвращает пользователя по кнопке
+	     «Всё равно открыть». snssdk1233 — схема TikTok. shortcuts — «Команды»
+	     для кнопки на экране настройки. -->
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>instagram</string>
+		<string>snssdk1233</string>
+		<string>youtube</string>
+		<string>shortcuts</string>
+	</array>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

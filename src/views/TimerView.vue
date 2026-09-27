@@ -183,6 +183,15 @@ function complete() {
       minutes: overrideMinutes.value,
     })
   }
+  // Таймер запущен с экрана перехвата и досижен: вместо ленты — привычка.
+  // Проверочные запуски из настроек (test=1) в статистику не идут.
+  if (route.query.from === 'wake' && route.query.test !== '1') {
+    logEvent('wake_habit_completed', {
+      app: route.query.app || 'unknown',
+      habitId: route.params.id,
+      minutes: overrideMinutes.value,
+    })
+  }
   store.completeHabit(habit.value.id)
   router.replace('/')
 }
