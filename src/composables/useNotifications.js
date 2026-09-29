@@ -1,5 +1,7 @@
 import { LocalNotifications } from '@capacitor/local-notifications'
 import { useHabitsStore } from '../stores/habits'
+import { t, plural } from '../i18n'
+import { dayTime } from '../lib/dates'
 
 // Относится ли уведомление к привычке. Надёжный путь — поле habit из AI;
 // фолбэк — поиск названия в тексте. Для русских падежей («разминка» /
@@ -143,6 +145,58 @@ export async function setupNotifications() {
 
   console.log('scheduling notifications:', JSON.stringify(notifications))
   await LocalNotifications.schedule({ notifications })
+
+  await scheduleTaskReminders()
+}
+
+// Напоминания о задачах с датой: одно уведомление в запланированный день и
+// время. Задачи на один и тот же момент собираются в одно уведомление.
+// Своя полоса id, чтобы перепланирование не задевало остальные уведомления.
+// iOS держит не больше 64 запланированных уведомлений на приложение, поэтому
+// берём только ближайшие — остальные доберутся при следующих запусках.
+const TASK_ID_FROM = 300
+const TASK_ID_RANGE = 30
+
+export async function scheduleTaskReminders() {
+  const store = useHabitsStore()
+  try {
+    const ids = Array.from({ length: TASK_ID_RANGE }, (_, i) => ({ id: TASK_ID_FROM + i }))
+    await LocalNotifications.cancel({ notifications: ids })
+
+    const now = new Date()
+    const groups = new Map()
+    for (const task of store.tasks) {
+      if (task.done || !task.remindTime) continue
+      const at = dayTime(task.date, task.remindTime)
+      if (at <= now) continue
+      const key = at.getTime()
+      if (!groups.has(key)) groups.set(key, { at, texts: [] })
+      groups.get(key).texts.push(task.text)
+    }
+    if (!groups.size) return
+
+    // Разрешение спрашиваем только когда напоминать действительно есть о чём:
+    // человек сам попросил напомнить. Если уже отвечал — диалога не будет.
+    const permission = await LocalNotifications.requestPermissions()
+    if (permission.display !== 'granted') return
+
+    const notifications = [...groups.values()]
+      .sort((a, b) => a.at - b.at)
+      .slice(0, TASK_ID_RANGE)
+      .map(({ at, texts }, i) => ({
+        id: TASK_ID_FROM + i,
+        title:
+          texts.length === 1
+            ? t('tasks.remindTitle')
+            : t('tasks.remindTitleMany', { n: texts.length, word: plural(texts.length, 'tasks.taskWord') }),
+        body: texts.join(', '),
+        schedule: { at, allowWhileIdle: true },
+        extra: { screen: 'tasks' },
+      }))
+    await LocalNotifications.schedule({ notifications })
+  } catch (e) {
+    console.log('scheduleTaskReminders error:', e)
+  }
 }
 
 // Снимает конкретные запланированные уведомления по их id.

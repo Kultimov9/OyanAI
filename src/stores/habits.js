@@ -4,6 +4,7 @@ import { logEvent } from '../composables/useAnalytics'
 import { t, applyProfileLocale } from '../i18n'
 import { useFriendsStore } from './friends'
 import { usePairsStore } from './pairs'
+import { localDay, dayDiff } from '../lib/dates'
 
 // Кэш промиса загрузки данных. Живёт вне state, поэтому не персистится и не
 // сериализуется. Гарантирует, что fetchAll() выполнится один раз, а параллельные
@@ -70,9 +71,22 @@ export const useHabitsStore = defineStore('habits', {
         (h) => !h.completedDates.includes(today) && state.skippedHabits[h.id] !== today,
       )
     },
+    // Задачи на сегодня: запланированные на сегодня и невыполненные прошлых дней
+    // (они висят, пока их не сделают), плюс сделанные сегодня. Дни — местные.
     todayTasks: (state) => {
-      const today = new Date().toISOString().split('T')[0]
-      return state.tasks.filter((t) => t.date === today)
+      const today = localDay()
+      return state.tasks.filter((t) => (t.done ? t.date === today : t.date <= today))
+    },
+    // Запланированные на будущие дни — ближайшие сверху.
+    plannedTasks: (state) => {
+      const today = localDay()
+      return state.tasks
+        .filter((t) => !t.done && t.date > today)
+        .sort((a, b) =>
+          a.date === b.date
+            ? (a.remindTime || '').localeCompare(b.remindTime || '')
+            : a.date.localeCompare(b.date),
+        )
     },
     // Общий счётчик для бейджей: входящие заявки в друзья + приглашения в пары.
     // Сторы подключаются внутри геттера — на верхнем уровне это дало бы цикл
@@ -113,6 +127,8 @@ export const useHabitsStore = defineStore('habits', {
         text: t.text,
         done: t.done,
         date: t.date,
+        // time из Postgres приходит как 'HH:MM:SS'
+        remindTime: t.remind_time ? t.remind_time.slice(0, 5) : null,
       }))
       this.goals = (goalsRes.data || []).map((g) => ({
         id: g.id,
@@ -396,17 +412,26 @@ export const useHabitsStore = defineStore('habits', {
     },
 
     // === Задачи ===
-    async addTask(text) {
+    // date — день, на который задача запланирована (по умолчанию сегодня).
+    // remindTime — 'HH:MM', когда напомнить в этот день; null — без напоминания.
+    async addTask(text, { date = localDay(), remindTime = null } = {}) {
       const id = crypto.randomUUID()
-      const date = new Date().toISOString().split('T')[0]
-      this.tasks.push({ id, text, done: false, date })
-      logEvent('task_created', { id })
+      this.tasks.push({ id, text, done: false, date, remindTime })
+      logEvent('task_created', {
+        id,
+        planned_days: dayDiff(date, localDay()),
+        remind: Boolean(remindTime),
+      })
+      if (remindTime) this.rescheduleTaskReminders()
       const { error } = await supabase.from('tasks').insert({
         id,
         user_id: this.userId,
         text,
         done: false,
         date,
+        // Поле только при напоминании: обычные задачи сохраняются и там, где
+        // колонку remind_time ещё не добавили.
+        ...(remindTime ? { remind_time: remindTime } : {}),
       })
       if (error) console.error('addTask error:', error)
     },
@@ -415,35 +440,46 @@ export const useHabitsStore = defineStore('habits', {
       const task = this.tasks.find((t) => t.id === id)
       if (task) {
         task.done = !task.done
-        if (task.done) logEvent('task_done', { id })
-        const { error } = await supabase.from('tasks').update({ done: task.done }).eq('id', id)
+        const patch = { done: task.done }
+        if (task.done) {
+          logEvent('task_done', { id })
+          // Сделанная задача относится к дню, когда её сделали: так
+          // просроченная или запланированная наперёд попадает в «Готово»
+          // сегодня, а завтра уходит из списка.
+          const today = localDay()
+          if (task.date !== today) {
+            task.date = today
+            patch.date = today
+          }
+        }
+        if (task.remindTime) this.rescheduleTaskReminders()
+        const { error } = await supabase.from('tasks').update(patch).eq('id', id)
         if (error) console.error('toggleTask error:', error)
       }
     },
 
     async removeTask(id) {
+      const removed = this.tasks.find((t) => t.id === id)
       this.tasks = this.tasks.filter((t) => t.id !== id)
+      if (removed?.remindTime) this.rescheduleTaskReminders()
       const { error } = await supabase.from('tasks').delete().eq('id', id)
       if (error) console.error('removeTask error:', error)
     },
 
-    async clearOldTasks() {
-      const today = new Date().toISOString().split('T')[0]
-      const idsToUpdate = []
-      this.tasks = this.tasks
-        .map((t) => {
-          if (t.date !== today && !t.done) {
-            idsToUpdate.push(t.id)
-            return { ...t, date: today }
-          }
-          return t
-        })
-        .filter((t) => t.date === today || !t.done)
+    // Сделанные в прошлые дни задачи больше не показываются — убираем их из
+    // локального состояния, чтобы оно не разрасталось. Невыполненные не
+    // трогаем: дата у них остаётся той, на которую их планировали («с 27 сент»).
+    clearOldTasks() {
+      const today = localDay()
+      this.tasks = this.tasks.filter((t) => !t.done || t.date >= today)
+    },
 
-      if (idsToUpdate.length > 0) {
-        const { error } = await supabase.from('tasks').update({ date: today }).in('id', idsToUpdate)
-        if (error) console.error('clearOldTasks error:', error)
-      }
+    // Напоминания по задачам планируются на устройстве. Динамический импорт —
+    // useNotifications сам импортирует этот стор.
+    rescheduleTaskReminders() {
+      import('../composables/useNotifications')
+        .then(({ scheduleTaskReminders }) => scheduleTaskReminders())
+        .catch((e) => console.log('task reminders error:', e))
     },
 
     // === Цели ===

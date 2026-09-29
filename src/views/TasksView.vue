@@ -28,6 +28,18 @@
             :placeholder="t('tasks.addPlaceholder')"
             @keydown.enter="addTask"
           />
+          <!-- Дата задачи: по умолчанию сегодня, тогда кнопка — просто иконка.
+               Выбранные дата и напоминание видны прямо на кнопке. -->
+          <button
+            class="date-btn"
+            :class="{ set: draftIsCustom }"
+            :aria-label="t('tasks.dateLabel')"
+            @click="sheetOpen = true"
+          >
+            <CalendarDays :size="18" />
+            <span v-if="draftIsCustom">{{ draftLabel }}</span>
+            <Bell v-if="draftRemind" :size="13" />
+          </button>
           <button class="add-btn" @click="addTask">
             <Plus :size="20" />
           </button>
@@ -44,6 +56,12 @@
             >
               <div class="checkbox" />
               <span class="task-text">{{ task.text }}</span>
+              <span v-if="task.date < todayKey()" class="chip">
+                {{ t('tasks.since', { date: shortDay(task.date) }) }}
+              </span>
+              <span v-else-if="task.remindTime" class="chip">
+                <Bell :size="11" />{{ task.remindTime }}
+              </span>
               <button class="delete-btn" @click.stop="store.removeTask(task.id)">
                 <Trash2 :size="15" />
               </button>
@@ -81,6 +99,29 @@
 
         <div v-if="totalCount > 0 && completedCount === totalCount" class="congrats">
           <p class="congrats-text">{{ t('tasks.allDone') }}</p>
+        </div>
+
+        <!-- Будущие задачи: не входят в прогресс дня и не напоминают о себе
+             до своего дня. В этот день сами переходят в «Осталось». -->
+        <div v-if="store.plannedTasks.length > 0" class="section">
+          <p class="section-label">{{ t('tasks.planned') }} · {{ store.plannedTasks.length }}</p>
+          <div class="task-list">
+            <div
+              v-for="task in store.plannedTasks"
+              :key="task.id"
+              class="task-card planned"
+              @click="store.toggleTask(task.id)"
+            >
+              <div class="checkbox" />
+              <span class="task-text">{{ task.text }}</span>
+              <span class="chip">
+                <Bell v-if="task.remindTime" :size="11" />{{ plannedLabel(task) }}
+              </span>
+              <button class="delete-btn" @click.stop="store.removeTask(task.id)">
+                <Trash2 :size="15" />
+              </button>
+            </div>
+          </div>
         </div>
       </template>
 
@@ -172,6 +213,57 @@
         </div>
       </template>
     </div>
+
+    <!-- Выбор дня и напоминания для новой задачи. -->
+    <Transition name="sheet">
+      <div v-if="sheetOpen" class="sheet-backdrop" @click.self="sheetOpen = false">
+        <div class="sheet">
+          <p class="sheet-title">{{ t('tasks.sheetTitle') }}</p>
+          <div class="sheet-list">
+            <button class="sheet-row" @click="pickDay(todayKey())">
+              <span class="row-main">{{ t('tasks.today') }}</span>
+              <span class="row-meta">{{ weekday(todayKey()) }}</span>
+              <Check v-if="draftDate === todayKey()" :size="16" class="row-check" />
+            </button>
+            <button class="sheet-row" @click="pickDay(tomorrowKey())">
+              <span class="row-main">{{ t('tasks.tomorrow') }}</span>
+              <span class="row-meta">{{ weekday(tomorrowKey()) }}</span>
+              <Check v-if="draftDate === tomorrowKey()" :size="16" class="row-check" />
+            </button>
+            <label class="sheet-row">
+              <span class="row-main">
+                {{ draftIsFar ? longDay(draftDate) : t('tasks.pickDate') }}
+              </span>
+              <Check v-if="draftIsFar" :size="16" class="row-check" />
+              <ChevronRight v-else :size="16" class="row-meta" />
+              <input
+                type="date"
+                class="date-hidden"
+                :min="todayKey()"
+                :value="draftDate"
+                @input="pickDay($event.target.value)"
+              />
+            </label>
+            <div class="sheet-row remind-row">
+              <span class="row-main">{{ t('tasks.remind') }}</span>
+              <input v-if="draftRemind" v-model="draftTime" type="time" class="time-input" />
+              <button
+                class="switch"
+                :class="{ on: draftRemind }"
+                role="switch"
+                :aria-checked="draftRemind"
+                :aria-label="t('tasks.remind')"
+                @click="toggleRemind"
+              >
+                <span class="knob" />
+              </button>
+            </div>
+          </div>
+          <p v-if="remindPast" class="sheet-hint">{{ t('tasks.remindPast') }}</p>
+          <button class="sheet-apply" @click="sheetOpen = false">{{ t('tasks.apply') }}</button>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -179,8 +271,9 @@
 import { ref, computed } from 'vue'
 import { useHabitsStore } from '../stores/habits'
 import { useScreenRefresh } from '../composables/useScreenRefresh'
-import { t } from '../i18n'
-import { Plus, Trash2, Check } from 'lucide-vue-next'
+import { t, locale } from '../i18n'
+import { localDay, addDays, parseDay, dayTime } from '../lib/dates'
+import { Plus, Trash2, Check, CalendarDays, Bell, ChevronRight } from 'lucide-vue-next'
 
 const store = useHabitsStore()
 
@@ -207,10 +300,89 @@ const sortedGoals = computed(() =>
   [...store.goals].sort((a, b) => new Date(a.deadline) - new Date(b.deadline)),
 )
 
+// ── Дата новой задачи ──
+// Функции, а не computed: экран может пережить полночь, а computed закэширует
+// вчерашний день.
+const todayKey = () => localDay()
+const tomorrowKey = () => addDays(localDay(), 1)
+
+const sheetOpen = ref(false)
+const draftDate = ref(todayKey())
+const draftRemind = ref(false)
+const pad = (n) => String(n).padStart(2, '0')
+const draftTime = ref(`${pad(store.notifications.morningHour ?? 9)}:00`)
+// Напоминание включается само для будущего дня, пока человек сам не нажал
+// переключатель — после этого его выбор не перебиваем.
+const remindTouched = ref(false)
+
+// Любой выбор, кроме «сегодня без напоминания», показываем прямо на кнопке.
+const draftIsCustom = computed(() => draftDate.value !== todayKey() || draftRemind.value)
+const draftIsFar = computed(() => draftDate.value > tomorrowKey())
+const draftLabel = computed(() => {
+  if (draftDate.value === todayKey()) return draftRemind.value ? draftTime.value : ''
+  if (draftDate.value === tomorrowKey()) return t('tasks.tomorrow')
+  return shortDay(draftDate.value)
+})
+const remindPast = computed(
+  () =>
+    draftRemind.value &&
+    draftDate.value === todayKey() &&
+    dayTime(draftDate.value, draftTime.value) <= new Date(),
+)
+
+function pickDay(day) {
+  if (!day || day < todayKey()) return
+  draftDate.value = day
+  if (!remindTouched.value) draftRemind.value = day > todayKey()
+}
+
+function toggleRemind() {
+  remindTouched.value = true
+  draftRemind.value = !draftRemind.value
+}
+
+function resetDraft() {
+  draftDate.value = todayKey()
+  draftRemind.value = false
+  remindTouched.value = false
+}
+
 function addTask() {
   if (!newTask.value.trim()) return
-  store.addTask(newTask.value.trim())
+  store.addTask(newTask.value.trim(), {
+    date: draftDate.value < todayKey() ? todayKey() : draftDate.value,
+    remindTime: draftRemind.value && draftTime.value ? draftTime.value : null,
+  })
   newTask.value = ''
+  resetDraft()
+}
+
+// Русский формат берём из Intl, казахский собираем сами: данных kk-KZ в Intl
+// может не быть, и тогда вместо «5 қаз» выходит «M10 5».
+// Результат: «пн, 5 окт» / «дс, 5 қаз»; поля — как в toLocaleDateString.
+function fmt(day, { weekday: wd = false, month = 'short' } = {}) {
+  const d = parseDay(day)
+  if (locale.value === 'kk') {
+    const months = t(month === 'long' ? 'tasks.monthsLong' : 'tasks.monthsShort')
+    const date = month ? `${d.getDate()} ${months[d.getMonth()]}` : ''
+    const w = wd ? t('tasks.weekdaysShort')[d.getDay()] : ''
+    return [w, date].filter(Boolean).join(', ')
+  }
+  return d
+    .toLocaleDateString('ru-RU', {
+      ...(wd ? { weekday: 'short' } : {}),
+      ...(month ? { day: 'numeric', month } : {}),
+    })
+    .replace(/\.$/, '')
+}
+
+const shortDay = (day) => fmt(day)
+const longDay = (day) => fmt(day, { weekday: true, month: 'long' })
+const weekday = (day) => fmt(day, { weekday: true, month: null })
+
+function plannedLabel(task) {
+  const day = task.date === tomorrowKey() ? t('tasks.tomorrow') : fmt(task.date, { weekday: true })
+  return task.remindTime ? `${day} · ${task.remindTime}` : day
 }
 
 function addGoal() {
@@ -665,5 +837,190 @@ function formatDate(dateStr) {
   width: 100%;
   height: 100%;
   cursor: pointer;
+}
+
+/* ── Задачи с датой ── */
+.date-btn {
+  height: 44px;
+  min-width: 44px;
+  padding: 0 12px;
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: #9a9a92;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.date-btn.set {
+  color: #f5f0e8;
+  border-color: #5a5a55;
+}
+.date-btn:active {
+  transform: scale(0.95);
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #9a9a92;
+  border: 1px solid #2a2a2a;
+  border-radius: 8px;
+  padding: 2px 8px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.task-card.planned {
+  background: transparent;
+  border-style: dashed;
+}
+.task-card.planned .task-text {
+  color: #c9c4bb;
+}
+
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.sheet {
+  width: 100%;
+  max-width: 430px;
+  background: #141414;
+  border-top: 1px solid #2a2a2a;
+  border-radius: 22px 22px 0 0;
+  padding: 18px 20px calc(env(safe-area-inset-bottom) + 20px);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-sizing: border-box;
+}
+.sheet-title {
+  margin: 0;
+  font-size: 14px;
+  color: #9a9a92;
+}
+.sheet-list {
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 16px;
+  overflow: hidden;
+}
+.sheet-row {
+  position: relative;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  min-height: 52px;
+  box-sizing: border-box;
+  background: none;
+  border: none;
+  border-bottom: 1px solid #2a2a2a;
+  color: #f5f0e8;
+  font-size: 15px;
+  text-align: left;
+  cursor: pointer;
+}
+.sheet-row:last-child {
+  border-bottom: none;
+}
+.sheet-row:active {
+  background: #202020;
+}
+.remind-row:active {
+  background: none;
+}
+.row-main {
+  flex: 1;
+}
+.row-meta {
+  color: #5a5a55;
+  font-size: 13px;
+}
+.row-check {
+  color: #f5f0e8;
+}
+.time-input {
+  background: #0a0a0a;
+  border: 1px solid #2a2a2a;
+  border-radius: 8px;
+  color: #f5f0e8;
+  font-size: 15px;
+  padding: 4px 8px;
+  outline: none;
+}
+.switch {
+  width: 46px;
+  height: 28px;
+  border-radius: 14px;
+  border: none;
+  background: #2a2a2a;
+  position: relative;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.2s;
+}
+.switch.on {
+  background: #f5f0e8;
+}
+.knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #5a5a55;
+  transition:
+    transform 0.2s,
+    background 0.2s;
+}
+.switch.on .knob {
+  transform: translateX(18px);
+  background: #0a0a0a;
+}
+.sheet-hint {
+  margin: -4px 4px 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #9a9a92;
+}
+.sheet-apply {
+  background: #f5f0e8;
+  color: #0a0a0a;
+  border: none;
+  border-radius: 14px;
+  padding: 15px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.sheet-enter-active,
+.sheet-leave-active {
+  transition: opacity 0.2s ease;
+}
+.sheet-enter-active .sheet,
+.sheet-leave-active .sheet {
+  transition: transform 0.25s ease;
+}
+.sheet-enter-from,
+.sheet-leave-to {
+  opacity: 0;
+}
+.sheet-enter-from .sheet,
+.sheet-leave-to .sheet {
+  transform: translateY(100%);
 }
 </style>

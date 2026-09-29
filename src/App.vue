@@ -103,9 +103,14 @@ function routeWake(url) {
 // Тап по баннеру анти-скролла. Баннер показывает нативная часть, а ссылку
 // кладёт в cap_extra — плагин отдаёт её как notification.extra.wake.
 // Событие удерживается до подписки, поэтому тап не теряется и на холодном старте.
+// Напоминание о задаче с датой ведёт на экран задач.
 LocalNotifications.addListener('localNotificationActionPerformed', ({ notification }) => {
-  const url = notification?.extra?.wake
-  if (url) routeWake(url)
+  const extra = notification?.extra || {}
+  if (extra.wake) routeWake(extra.wake)
+  else if (extra.screen === 'tasks') {
+    logEvent('task_reminder_opened')
+    router.push('/tasks')
+  }
 })
 
 CapApp.addListener('appUrlOpen', ({ url }) => {

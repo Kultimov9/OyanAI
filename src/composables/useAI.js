@@ -1,6 +1,7 @@
 import { useHabitsStore } from '../stores/habits'
 import { promptLang } from '../i18n'
 import { supabase } from '../lib/supabase'
+import { localDay, dayDiff } from '../lib/dates'
 
 // ── Согласие на передачу данных в Anthropic ─────────────────────────────────
 // Требование App Store 5.1.1(i)/5.1.2(i): личные данные нельзя отправлять
@@ -164,6 +165,33 @@ function buildRecentReflections(store) {
   return `ПОСЛЕДНИЕ РЕФЛЕКСИИ (до 5):\n${lines}`
 }
 
+// ── Задачи с датой ──
+// Дни задач — местные (человек выбирал их по своему календарю), и давность
+// считаем в коде: модели отдаём готовое «сегодня» / «завтра» / «через N дн.».
+function dueLabel(n) {
+  if (n <= 0) return 'сегодня'
+  if (n === 1) return 'завтра'
+  if (n === 2) return 'послезавтра'
+  return `через ${n} дн.`
+}
+
+// Дела, которые человек сам запланировал на сегодня (дата + напоминание).
+function plannedForToday(store) {
+  const today = localDay()
+  return store.tasks.filter((t) => !t.done && t.remindTime && t.date === today)
+}
+
+// Запланированные на ближайшие 14 дней — чтобы коуч знал, что впереди.
+function buildPlannedTasks(store) {
+  const today = localDay()
+  const soon = store.plannedTasks.filter((t) => dayDiff(t.date, today) <= 14)
+  if (!soon.length) return 'ЗАПЛАНИРОВАНО НА БЛИЖАЙШИЕ ДНИ: ничего'
+  const lines = soon
+    .map((t) => `- ${t.text} — ${dueLabel(dayDiff(t.date, today))} (${t.date})`)
+    .join('\n')
+  return `ЗАПЛАНИРОВАНО НА БЛИЖАЙШИЕ ДНИ:\n${lines}`
+}
+
 // Сводка активности из таблицы events за 7 дней. Устойчиво: при ошибке — ''.
 async function buildActivitySummary(store) {
   try {
@@ -290,6 +318,8 @@ ${habitsHistory}
 - Выполнено: ${doneTasks.map((t) => t.text).join(', ') || 'пока ничего'}
 - Осталось: ${undoneTasks.map((t) => t.text).join(', ') || 'все выполнены'}
 
+${buildPlannedTasks(store)}
+
 АКТИВНЫЕ ЦЕЛИ:
 ${goalsInfo}
 
@@ -325,6 +355,16 @@ export async function generateGreeting({ habitName, duration, habitId } = {}) {
   // обыгрывать «0 дней подряд».
   const streakLine = targetBest > 1 ? `\n- Лучшая серия по этой привычке: ${targetBest} дней подряд` : ''
 
+  // Дела, которые человек заранее запланировал на сегодня, — ради них он и
+  // ставил дату. Строка и правило появляются, только если такие дела есть.
+  const planned = plannedForToday(store).map((t) => t.text)
+  const plannedLine = planned.length
+    ? `\n- Запланировано на сегодня заранее: ${planned.join(', ')}`
+    : ''
+  const plannedRule = planned.length
+    ? `\nОтдельной короткой фразой в конце напомни про запланированное на сегодня дело (${planned.join(', ')}). Не превращай это в список.`
+    : ''
+
   // Кейс «нет ни одной привычки»: мягкий вопрос, что человек чаще откладывает,
   // и предложение начать с одного маленького шага.
   const context = habitName
@@ -340,11 +380,11 @@ export async function generateGreeting({ habitName, duration, habitId } = {}) {
 4. Мягко позови начать прямо сейчас (${duration} минут).
 5. Используй только те цифры, что даны ниже. Числа из контекста относятся
    к привычке "${habitName}" — не приписывай ей достижения других привычек
-   и не выдумывай новые цифры.
+   и не выдумывай новые цифры.${plannedRule}
 
 Контекст:
 - Привычки пользователя: ${allHabits}
-- Сегодня уже выполнено: ${completedToday.map((h) => h.name).join(', ') || 'пока ничего'}${streakLine}
+- Сегодня уже выполнено: ${completedToday.map((h) => h.name).join(', ') || 'пока ничего'}${streakLine}${plannedLine}
 `
     : `
 Ты — личный наставник пользователя в приложении Oyan. Тон: тёплый, спокойный, поддерживающий.
@@ -356,7 +396,7 @@ export async function generateGreeting({ habitName, duration, habitId } = {}) {
 1. Тепло поприветствуй.
 2. Мягко, с любопытством спроси, что он чаще всего откладывает или давно хочет начать.
 3. Предложи начать с одного крошечного шага — добавить первую привычку на пару минут в день.
-Не дави, не перечисляй списком, звучи по-человечески.
+Не дави, не перечисляй списком, звучи по-человечески.${plannedRule}
 `
 
   const text = await callClaude('greeting', context, 'Поприветствуй меня.')
@@ -375,7 +415,10 @@ export async function generateNotifications() {
   const today = new Date().toISOString().split('T')[0]
   const completedToday = store.habits.filter((h) => h.completedDates.includes(today))
   const pendingToday = store.habits.filter((h) => !h.completedDates.includes(today))
-  const undoneTasks = store.todayTasks.filter((t) => !t.done)
+  // У запланированных на сегодня дел своё напоминание в выбранное время —
+  // AI о них не пишет, иначе человеку придут два пуша про одно дело.
+  const planned = plannedForToday(store)
+  const undoneTasks = store.todayTasks.filter((t) => !t.done && !planned.includes(t))
 
   // О самочувствии спрашиваем только по свежей рефлексии — сегодняшней или
   // вчерашней. Спустя несколько дней «вчера было тяжело» звучит как ошибка,
