@@ -22,9 +22,9 @@ function goalDone(goal) {
 
 // Уведомление потеряло смысл: его предмет удалён или уже выполнен.
 //
-// AI-уведомления живут в персистентном сторе и планируются с repeats: true,
-// поэтому без этой проверки пуш про удалённую привычку или достигнутую цель
-// продолжает приходить каждый день. Сверяемся по id — он проставляется при
+// AI-уведомления живут в персистентном сторе и перепланируются при каждом
+// открытии приложения, поэтому без этой проверки пуш про удалённую привычку
+// или достигнутую цель пришёл бы снова. Сверяемся по id — он проставляется при
 // генерации; для уведомлений, сохранённых до этой правки, id нет, и тогда
 // сверяемся по названию.
 export function isObsolete(notification, store, today) {
@@ -66,13 +66,20 @@ function clampAwake(h) {
   return x
 }
 
+// Диапазон id AI-уведомлений: generateNotifications выдаёт 100, 101, 102…
+const AI_ID_FROM = 100
+const AI_ID_RANGE = 20
+
 export async function setupNotifications() {
   const store = useHabitsStore()
   const permission = await LocalNotifications.requestPermissions()
   if (permission.display !== 'granted') return
 
-  const allIds = [{ id: 1 }, { id: 2 }, ...store.customNotifications.map((n) => ({ id: n.id }))]
-  await LocalNotifications.cancel({ notifications: allIds })
+  // Снимаем весь диапазон AI-уведомлений, а не только текущие id: если сегодня
+  // сгенерировалось меньше, чем вчера, лишнее вчерашнее иначе осталось бы
+  // запланированным и приходило бы дальше.
+  const aiIds = Array.from({ length: AI_ID_RANGE }, (_, i) => ({ id: AI_ID_FROM + i }))
+  await LocalNotifications.cancel({ notifications: [{ id: 1 }, { id: 2 }, ...aiIds] })
 
   const today = new Date().toISOString().split('T')[0]
   const doneToday = store.habits.filter((h) => h.completedDates.includes(today))
@@ -114,17 +121,23 @@ export async function setupNotifications() {
         allowWhileIdle: true,
       },
     },
-    ...store.customNotifications
+    // AI-тексты написаны про конкретный день («сегодня», «вчера», сегодняшние
+    // привычки), поэтому планируем их один раз на сегодня. С повтором каждый
+    // день в дни, когда Oyan не открывали, приходили бы вчерашние тексты.
+    // Сгенерированные не сегодня не планируем вовсе; прошедшее время — тоже.
+    ...(store.lastNotifGenDate === today ? store.customNotifications : [])
       .filter((n) => !isObsolete(n, store, today) && !isAboutDoneHabit(n))
-      .map((n) => ({
+      .map((n) => {
+        const at = new Date()
+        at.setHours(n.hour, n.minute || 0, 0, 0)
+        return { n, at }
+      })
+      .filter(({ at }) => at > new Date())
+      .map(({ n, at }) => ({
         id: n.id,
         title: 'Oyan ✨',
         body: n.text,
-        schedule: {
-          on: { hour: n.hour, minute: n.minute || 0 },
-          repeats: true,
-          allowWhileIdle: true,
-        },
+        schedule: { at, allowWhileIdle: true },
       })),
   ]
 

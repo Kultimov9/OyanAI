@@ -165,6 +165,10 @@ export async function savePushToken() {
 export async function requestPushPermission(reason = 'onboarding') {
   const OneSignal = await getSdk()
   if (!OneSignal) return false
+  // Новый пользователь: на старте сессии не было, App.vue initPush не вызывал.
+  // Без initialize запрос разрешения у плагина просто не возвращается.
+  await initPush()
+  if (!inited) return false
   try {
     localStorage.setItem(ASKED_KEY, '1')
   } catch {

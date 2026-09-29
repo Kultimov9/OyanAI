@@ -38,10 +38,16 @@
         </button>
       </div>
       <p v-if="selectedHabits.length === 0" class="hint">{{ t('onboarding.pickAtLeastOne') }}</p>
-      <button class="btn light-btn" :disabled="selectedHabits.length === 0" @click="finish">
+      <button
+        class="btn light-btn"
+        :disabled="selectedHabits.length === 0 || busy"
+        @click="finish"
+      >
         {{ t('onboarding.start') }}
       </button>
-      <button class="skip-link" @click="skipOnboarding">{{ t('onboarding.skip') }}</button>
+      <button class="skip-link" :disabled="busy" @click="skipOnboarding">
+        {{ t('onboarding.skip') }}
+      </button>
     </div>
 
     <div class="dots">
@@ -96,23 +102,40 @@ function toggleHabit(habit) {
   else selectedIdx.value.splice(pos, 1)
 }
 
+// Пока идёт сохранение, повторные нажатия игнорируются: иначе каждое нажатие
+// создаёт полный набор привычек заново.
+const busy = ref(false)
+
 async function finish() {
-  for (const h of selectedHabits.value) {
-    await store.addHabit(h.name, h.emoji, h.duration)
+  if (busy.value) return
+  busy.value = true
+  try {
+    for (const h of selectedHabits.value) {
+      await store.addHabit(h.name, h.emoji, h.duration)
+    }
+    logEvent('onboarding_completed', { count: selectedHabits.value.length })
+    await store.setOnboarded()
+    router.replace('/')
+    // Момент для системного диалога: привычки уже созданы, ценность напоминаний
+    // понятна. iOS показывает его один раз за установку. Не ждём ответа: если
+    // промис плагина не вернётся, человек не должен застрять на этом экране.
+    requestPushPermission('onboarding')
+  } finally {
+    busy.value = false
   }
-  logEvent('onboarding_completed', { count: selectedHabits.value.length })
-  await store.setOnboarded()
-  // Момент для системного диалога: привычки уже созданы, ценность напоминаний
-  // понятна. iOS показывает его один раз за установку.
-  await requestPushPermission('onboarding')
-  router.replace('/')
 }
 
 // Пропустить онбординг: без создания привычек, сразу на главную.
 async function skipOnboarding() {
-  logEvent('onboarding_skipped', { count: selectedHabits.value.length })
-  await store.setOnboarded()
-  router.replace('/')
+  if (busy.value) return
+  busy.value = true
+  try {
+    logEvent('onboarding_skipped', { count: selectedHabits.value.length })
+    await store.setOnboarded()
+    router.replace('/')
+  } finally {
+    busy.value = false
+  }
 }
 </script>
 

@@ -131,6 +131,26 @@ ${habitLines}
 - Хуже всего даётся: ${worst.name} (${worst.doneInWindow} из 14 дней)`
 }
 
+// Давность рефлексии считаем в коде и отдаём модели готовым словом. Сама она
+// с датами ошибается: получив рефлексию четырёхдневной давности, называла её
+// «вчерашней» — и пользователю приходило «вчера не было настроения».
+// Даты — в том же виде, что и в приложении (UTC, YYYY-MM-DD).
+const todayKey = () => new Date().toISOString().split('T')[0]
+const daysAgo = (date, today = todayKey()) =>
+  Math.round((Date.parse(today) - Date.parse(date)) / 86_400_000)
+
+function agoLabel(n) {
+  if (n <= 0) return 'сегодня'
+  if (n === 1) return 'вчера'
+  if (n === 2) return 'позавчера'
+  return `${n} дн. назад`
+}
+
+// Самая свежая рефлексия по дате. Не последний элемент массива: порядок в
+// сторе не гарантирован.
+const latestReflection = (store) =>
+  [...store.reflections].sort((a, b) => (a.date < b.date ? 1 : -1))[0] || null
+
 // Последние 5 рефлексий (по дате, свежие сверху).
 function buildRecentReflections(store) {
   const refs = [...store.reflections].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 5)
@@ -138,7 +158,7 @@ function buildRecentReflections(store) {
   const lines = refs
     .map(
       (r) =>
-        `- ${r.date}: настроение — ${r.mood || 'не указано'}; мешало: ${r.obstacles?.join(', ') || 'ничего'}; заметка: ${r.note ? `"${r.note}"` : 'нет'}`,
+        `- ${r.date} (${agoLabel(daysAgo(r.date))}): настроение — ${r.mood || 'не указано'}; мешало: ${r.obstacles?.join(', ') || 'ничего'}; заметка: ${r.note ? `"${r.note}"` : 'нет'}`,
     )
     .join('\n')
   return `ПОСЛЕДНИЕ РЕФЛЕКСИИ (до 5):\n${lines}`
@@ -356,7 +376,13 @@ export async function generateNotifications() {
   const completedToday = store.habits.filter((h) => h.completedDates.includes(today))
   const pendingToday = store.habits.filter((h) => !h.completedDates.includes(today))
   const undoneTasks = store.todayTasks.filter((t) => !t.done)
-  const lastReflection = store.reflections[store.reflections.length - 1]
+
+  // О самочувствии спрашиваем только по свежей рефлексии — сегодняшней или
+  // вчерашней. Спустя несколько дней «вчера было тяжело» звучит как ошибка,
+  // а не как забота.
+  const lastReflection = latestReflection(store)
+  const reflectionAge = lastReflection ? daysAgo(lastReflection.date, today) : null
+  const freshReflection = reflectionAge != null && reflectionAge <= 1 ? lastReflection : null
 
   function daysLeft(deadline) {
     const d = new Date(deadline)
@@ -402,14 +428,15 @@ export async function generateNotifications() {
 Правила времени:
 - Уведомления в разное время дня. Не раньше 9 утра и не позже 22.
 - Если у цели близкий или просроченный дедлайн — обязательно напомни про неё.
-- Если в последней рефлексии были трудности — мягко спроси, как дела сегодня.
+- Если в свежей рефлексии были трудности — мягко спроси, как дела сегодня.
+- День рефлексии называй ровно так, как он указан в данных. Не пиши «вчера», если в данных не сказано «вчера».
 
-Данные пользователя:
+Данные пользователя (сегодня ${today}):
 - Выполнено сегодня: ${completedToday.map((h) => h.name).join(', ') || 'пока ничего'}
 - Осталось привычек: ${pendingToday.map((h) => `${h.name} (${h.duration} мин)`).join(', ') || 'все выполнены'}
 - Невыполненные задачи: ${undoneTasks.map((t) => t.text).join(', ') || 'все выполнены'}
 - Активные цели: ${goalsInfo}
-${lastReflection ? `- Последняя рефлексия (${lastReflection.date}): настроение ${lastReflection.mood}, мешало: ${lastReflection.obstacles?.join(', ') || 'ничего'}, заметка: "${lastReflection.note || ''}"` : '- Рефлексий ещё нет'}
+${freshReflection ? `- Рефлексия за ${agoLabel(reflectionAge)} (${freshReflection.date}): настроение ${freshReflection.mood}, мешало: ${freshReflection.obstacles?.join(', ') || 'ничего'}, заметка: "${freshReflection.note || ''}"` : '- Свежих рефлексий нет — не упоминай прошлые дни и самочувствие'}
 
 Ответь ТОЛЬКО в формате JSON массива, без лишнего текста.
 Поле "habit" — ТОЧНОЕ название привычки из списка, о которой уведомление, или null.
