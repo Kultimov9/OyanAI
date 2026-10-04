@@ -121,6 +121,8 @@ export const useHabitsStore = defineStore('habits', {
         streak: h.streak,
         completedDates: h.completed_dates || [],
         isPublic: h.is_public || false,
+        // Где привычку можно выполнить: 'anywhere' | 'home'.
+        context: h.context || 'anywhere',
       }))
       this.tasks = (tasksRes.data || []).map((t) => ({
         id: t.id,
@@ -300,7 +302,7 @@ export const useHabitsStore = defineStore('habits', {
     },
 
     // === Привычки ===
-    async addHabit(name, emoji, duration, isPublic = false) {
+    async addHabit(name, emoji, duration, isPublic = false, context = 'anywhere') {
       const id = crypto.randomUUID()
       this.habits.push({
         id,
@@ -310,8 +312,9 @@ export const useHabitsStore = defineStore('habits', {
         streak: 0,
         completedDates: [],
         isPublic,
+        context,
       })
-      logEvent('habit_created', { id, name })
+      logEvent('habit_created', { id, name, context })
       const { error } = await supabase.from('habits').insert({
         id,
         user_id: this.userId,
@@ -321,6 +324,9 @@ export const useHabitsStore = defineStore('habits', {
         streak: 0,
         completed_dates: [],
         is_public: isPublic,
+        // Значение по умолчанию ставит база: так привычка сохранится и там,
+        // где колонку context ещё не добавили.
+        ...(context !== 'anywhere' ? { context } : {}),
       })
       if (error) console.error('addHabit error:', error)
     },
@@ -388,6 +394,25 @@ export const useHabitsStore = defineStore('habits', {
       if (error) {
         habit.isPublic = before
         console.error('setHabitVisibility error:', error)
+        return { ok: false, error: error.message }
+      }
+      return { ok: true }
+    },
+
+    // Где привычку можно выполнить ('anywhere' | 'home'). От этого зависит,
+    // предложит ли её анти-скролл. Оптимистично, с откатом при ошибке.
+    async setHabitContext(id, context) {
+      const habit = this.habits.find((h) => h.id === id)
+      if (!habit) return { ok: false }
+      const before = habit.context
+      habit.context = context
+      logEvent('habit_context_changed', { habit_id: id, context })
+
+      const { error } = await supabase.from('habits').update({ context }).eq('id', id)
+
+      if (error) {
+        habit.context = before
+        console.error('setHabitContext error:', error)
         return { ok: false, error: error.message }
       }
       return { ok: true }

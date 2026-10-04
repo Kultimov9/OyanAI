@@ -35,28 +35,16 @@
       </div>
     </template>
 
-    <!-- Всё сделано: не давим, сразу даём пройти дальше. -->
-    <template v-else-if="state === 'allDone'">
+    <!-- Подходящей привычки нет: конкретное действие внутри приложения —
+         отметить задачу или записать рефлексию. -->
+    <template v-else-if="state === 'action'">
       <div class="center">
-        <p class="headline">{{ t('wake.allDone') }}</p>
+        <p class="headline">{{ suggestion.bodies[0] }}</p>
       </div>
       <div class="actions">
-        <button v-if="knownApp" class="primary" @click="passthrough">
-          {{ t('wake.openAnyway', { app: appLabel }) }}
+        <button class="primary" @click="startAction('screen')">
+          {{ suggestion.type === 'reflection' ? t('wake.toReflection') : t('wake.toTasks') }}
         </button>
-        <button v-else class="primary" @click="goHome">{{ t('wake.goHome') }}</button>
-        <p v-if="error" class="error">{{ error }}</p>
-        <button class="link" @click="snooze">{{ t('wake.snooze') }}</button>
-      </div>
-    </template>
-
-    <template v-else-if="state === 'noHabits'">
-      <div class="center">
-        <p class="headline">{{ t('wake.noHabits') }}</p>
-        <p class="sub">{{ t('wake.noHabitsSub') }}</p>
-      </div>
-      <div class="actions">
-        <button class="primary" @click="addHabit">{{ t('wake.addHabit') }}</button>
         <button v-if="knownApp" class="quiet" @click="passthrough">
           {{ t('wake.openAnyway', { app: appLabel }) }}
         </button>
@@ -73,8 +61,16 @@ import { useRoute, useRouter } from 'vue-router'
 import { useHabitsStore } from '../stores/habits'
 import { logEvent } from '../composables/useAnalytics'
 import { t, plural } from '../i18n'
-import { APPS, pickHabit, wakeMinutes, fillTemplate } from '../lib/antiscroll'
-import { grantPass, grantSnooze, nextTemplate, openExternal } from '../composables/useAntiScroll'
+import { APPS, pickSuggestion, wakeMinutes, fillTemplate } from '../lib/antiscroll'
+import {
+  grantPass,
+  grantSnooze,
+  nextTemplate,
+  openExternal,
+  buildWakeSnapshot,
+  getLastSuggestionId,
+  setLastSuggestionId,
+} from '../composables/useAntiScroll'
 
 const route = useRoute()
 const router = useRouter()
@@ -88,20 +84,26 @@ const appLabel = computed(() => APPS[app.value]?.label || '')
 // посмотрел превью, считался бы в админке «настроившим» анти-скролл.
 const isTest = computed(() => route.query.test === '1')
 
-// Открыт тапом по баннеру анти-скролла: человек уже согласился на привычку.
+// Открыт тапом по баннеру анти-скролла: человек уже согласился на предложение.
 const fromNotification = computed(() => route.query.start === '1')
 
-// Сначала — не выполненные и не пропущенные сегодня. Если таких нет, но есть
-// пропущенные, предлагаем из них: говорить «всё сделано» было бы неправдой.
-const habit = computed(() => pickHabit(store.todayStartable) || pickHabit(store.todayPending))
+// Что предлагаем: привычку, которую можно сделать где угодно, а если такой
+// нет — задачу или рефлексию (см. pickSuggestion). Выбирается один раз при
+// открытии экрана: нужно асинхронно узнать, что предлагали в прошлый раз.
+const suggestion = ref(null)
+const habit = computed(() =>
+  suggestion.value?.type === 'habit'
+    ? store.habits.find((h) => h.id === suggestion.value.habitId) || null
+    : null,
+)
 const minutes = computed(() => wakeMinutes(habit.value))
 
 const state = computed(() => {
   if (route.query.bounce === '1') return 'bounce'
   if (route.query.loop === '1') return 'loop'
-  if (habit.value) return 'offer'
-  if (store.habits.length > 0) return 'allDone'
-  return 'noHabits'
+  // Доли секунды, пока читается прошлое предложение, — только строка сверху.
+  if (!suggestion.value) return 'pending'
+  return habit.value ? 'offer' : 'action'
 })
 
 const originText = computed(() =>
@@ -128,16 +130,43 @@ function track(type, payload = {}) {
   logEvent(type, { app: app.value, ...payload })
 }
 
-onMounted(() => {
+const utcToday = () => new Date().toISOString().split('T')[0]
+
+async function choose() {
+  const lastId = await getLastSuggestionId()
+  suggestion.value = pickSuggestion(buildWakeSnapshot(store), { lastId })
+  // Проверка из настроек не должна сбивать очередь настоящих перехватов.
+  if (!isTest.value) setLastSuggestionId(suggestion.value.id)
+}
+
+onMounted(async () => {
   templateIndex.value = nextTemplate(t('wake.offers').length)
-  // Тап по баннеру — сразу к таймеру, без экрана выбора. Показ уже учтён в
-  // журнале баннеров, второй раз wake_shown не пишем. Если за это время все
-  // привычки оказались сделаны, просто показываем экран.
+  if (state.value === 'loop' || state.value === 'bounce') return
+
+  // Тап по баннеру: что предложить, уже выбрала нативная часть — сразу к делу,
+  // без экрана выбора. Показ учтён в журнале баннеров, wake_shown не пишем.
   if (fromNotification.value) {
+    const { kind, id } = route.query
+    if (kind === 'task' || kind === 'reflection') {
+      suggestion.value = { id: '', type: kind, bodies: [''] }
+      startAction('notification')
+      return
+    }
+    const offered = store.habits.find((h) => h.id === id)
+    if (offered && !offered.completedDates.includes(utcToday())) {
+      suggestion.value = { id: `habit:${offered.id}`, type: 'habit', habitId: offered.id }
+      start()
+      return
+    }
+    // Привычку из баннера уже сделали или удалили (либо баннер старого
+    // формата) — выбираем заново. Привычку запускаем сразу, действие показываем.
+    await choose()
     if (state.value === 'offer') start()
     return
   }
-  if (state.value !== 'loop' && state.value !== 'bounce') track('wake_shown', { state: state.value })
+
+  await choose()
+  track('wake_shown', { state: state.value, suggestion_type: suggestion.value.type })
 })
 
 function start() {
@@ -145,6 +174,7 @@ function start() {
     habitId: habit.value.id,
     minutes: minutes.value,
     via: fromNotification.value ? 'notification' : 'screen',
+    suggestion_type: 'habit',
   })
   router.replace({
     path: `/timer/${habit.value.id}`,
@@ -178,8 +208,12 @@ async function snooze() {
   else goHome()
 }
 
-function addHabit() {
-  router.replace('/habits')
+// Задача или рефлексия: ведём на нужный экран. Отдельное событие от
+// wake_habit_started — чтобы видеть, какой тип предложений принимают.
+function startAction(via) {
+  const type = suggestion.value.type
+  track('wake_action_started', { suggestion_type: type, via })
+  router.replace(type === 'reflection' ? '/reflection' : '/tasks')
 }
 
 function openShortcuts() {

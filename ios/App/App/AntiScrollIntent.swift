@@ -10,7 +10,8 @@ import UserNotifications
 // «Instagram»» действие «Анти-скролл: Instagram». Оно стартует в фоне и решает:
 //   • пропуск активен («Всё равно открыть», «Не прерывать 1 час») → ничего;
 //   • уведомления разрешены → баннер сверху, человек остаётся в Instagram,
-//     тап по баннеру открывает Oyan сразу на таймере;
+//     тап по баннеру открывает Oyan сразу на предложенном деле: таймере
+//     привычки, задачах или рефлексии;
 //   • уведомления запрещены → выводит Oyan вперёд на экран перехвата.
 //
 // Выход вперёд — supportedModes с .foreground(.dynamic) и continueInForeground
@@ -46,36 +47,146 @@ enum AntiScrollDiagnostics {
     }
 }
 
-/// Готовые тексты уведомления. Привычки живут в веб-части, поэтому она заранее
-/// складывает сюда заголовок и варианты предложения на языке приложения.
-struct AntiScrollSuggestion: Decodable {
-    /// День, для которого собраны тексты (UTC, как и отметки привычек в приложении).
-    let date: String
+/// Снимок данных, из которых выбирается предложение. Привычки, задачи и
+/// рефлексии живут в веб-части, поэтому она заранее складывает сюда всё нужное
+/// с готовыми текстами на языке приложения (buildWakeSnapshot в useAntiScroll.js).
+struct AntiScrollSnapshot: Decodable {
+    struct Habit: Decodable {
+        let id: String
+        let bodies: [String]
+    }
+
+    struct Task: Decodable {
+        let id: String
+        /// День, на который задача запланирована (местный, yyyy-MM-dd).
+        let date: String
+        let body: String
+    }
+
+    /// День, к которому относятся done и skipped (UTC, как отметки привычек).
+    let day: String
     /// «Ты открыл {app}» — {app} подставляется здесь.
     let title: String
-    let bodies: [String]
-    let allDone: Bool
+    /// Только привычки, которые можно сделать где угодно.
+    let habits: [Habit]
+    let done: [String]
+    let skipped: [String]
+    /// Невыполненные задачи, включая запланированные наперёд.
+    let tasks: [Task]
+    /// День последней рефлексии (UTC) или nil, если их ещё не было.
+    let reflectionDay: String?
+    let reflectionBody: String
+    let pickTaskBody: String
 
     static let key = storagePrefix + "oyan-wake-suggestion"
 
-    /// Тексты на сегодня. Вчерашние не годятся: привычка могла быть уже сделана
-    /// или, наоборот, «все сделаны» относилось к прошлому дню.
-    static func loadForToday() -> AntiScrollSuggestion? {
-        guard
-            let raw = UserDefaults.standard.string(forKey: key),
-            let s = try? JSONDecoder().decode(AntiScrollSuggestion.self, from: Data(raw.utf8)),
-            s.date == todayUTC()
-        else { return nil }
-        return s
+    /// nil — снимка нет или он в старом формате (приложение после обновления
+    /// ещё не открывали).
+    static func load() -> AntiScrollSnapshot? {
+        guard let raw = UserDefaults.standard.string(forKey: key) else { return nil }
+        return try? JSONDecoder().decode(AntiScrollSnapshot.self, from: Data(raw.utf8))
+    }
+}
+
+/// Что предлагаем в этот раз.
+struct AntiScrollOffer {
+    /// «habit:<id>», «task:<id>», «reflection» или «pick-task» — по нему
+    /// проверяется, не предлагали ли то же самое в прошлый раз.
+    let id: String
+    /// habit | task | reflection — уходит в ссылку баннера и в статистику.
+    let type: String
+    /// Id привычки: по нему приложение откроет таймер именно её.
+    let habitId: String?
+    let bodies: [String]
+}
+
+/// Выбор предложения. Повторяет pickSuggestion из src/lib/antiscroll.js —
+/// меняешь здесь, меняй и там:
+///   1. привычка «где угодно», не выполненная сегодня;
+///   2. если таких нет — задача или (вечером) рефлексия, случайно из применимых;
+///   3. если и этого нет — выбрать задачу, с которой начать.
+/// Одно и то же два перехвата подряд не предлагаем.
+enum AntiScrollPicker {
+    /// Общий ключ с веб-частью: экран перехвата читает и пишет его же.
+    static let lastKey = storagePrefix + "oyan-antiscroll-last-suggestion"
+    static let reflectionFromHour = 18
+
+    static var lastId: String {
+        get { UserDefaults.standard.string(forKey: lastKey) ?? "" }
+        set { UserDefaults.standard.set(newValue, forKey: lastKey) }
     }
 
-    static func todayUTC() -> String {
+    static func pick(from snapshot: AntiScrollSnapshot?, now: Date = Date()) -> AntiScrollOffer {
+        guard let snap = snapshot else {
+            return AntiScrollOffer(
+                id: "pick-task", type: "task", habitId: nil,
+                bodies: ["Выбери одну задачу, с которой начнёшь"]
+            )
+        }
+        let last = lastId
+        let habits = habitOffers(snap, now: now)
+        // Единственную подходящую привычку чередуем с запасным действием.
+        let onlyHabitWasLast = habits.count == 1 && habits[0].id == last
+        let pool = (!habits.isEmpty && !onlyHabitWasLast)
+            ? habits
+            : fallbackOffers(snap, now: now, last: last)
+        // pool не бывает пустым: fallbackOffers всегда возвращает хотя бы одно.
+        return withoutLast(pool, last).randomElement()!
+    }
+
+    /// Без того, что предлагали в прошлый раз, — если после этого что-то остаётся.
+    private static func withoutLast(_ list: [AntiScrollOffer], _ last: String) -> [AntiScrollOffer] {
+        let rest = list.filter { $0.id != last }
+        return rest.isEmpty ? list : rest
+    }
+
+    private static func habitOffers(_ snap: AntiScrollSnapshot, now: Date) -> [AntiScrollOffer] {
+        // Отметки относятся к дню snap.day. Если он уже не сегодня, Oyan
+        // сегодня не открывали — значит, ни одна привычка ещё не выполнена.
+        let fresh = snap.day == day(now, utc: true)
+        let done = Set(fresh ? snap.done : [])
+        let skipped = Set(fresh ? snap.skipped : [])
+        let pending = snap.habits.filter { !done.contains($0.id) && !$0.bodies.isEmpty }
+        // Сначала не пропущенные сегодня; пропущенные — только если других нет.
+        let startable = pending.filter { !skipped.contains($0.id) }
+        return (startable.isEmpty ? pending : startable).map {
+            AntiScrollOffer(id: "habit:\($0.id)", type: "habit", habitId: $0.id, bodies: $0.bodies)
+        }
+    }
+
+    private static func fallbackOffers(_ snap: AntiScrollSnapshot, now: Date, last: String) -> [AntiScrollOffer] {
+        var offers: [AntiScrollOffer] = []
+        // Задачи на сегодня и висящие с прошлых дней; запланированные наперёд — нет.
+        let today = day(now, utc: false)
+        let due = snap.tasks.filter { $0.date <= today }.map {
+            AntiScrollOffer(id: "task:\($0.id)", type: "task", habitId: nil, bodies: [$0.body])
+        }
+        if let task = withoutLast(due, last).randomElement() {
+            offers.append(task)
+        }
+        let hour = Calendar.current.component(.hour, from: now)
+        if snap.reflectionDay != day(now, utc: true) && hour >= reflectionFromHour {
+            offers.append(AntiScrollOffer(
+                id: "reflection", type: "reflection", habitId: nil, bodies: [snap.reflectionBody]
+            ))
+        }
+        if offers.isEmpty {
+            offers.append(AntiScrollOffer(
+                id: "pick-task", type: "task", habitId: nil, bodies: [snap.pickTaskBody]
+            ))
+        }
+        return offers
+    }
+
+    /// yyyy-MM-dd: по UTC — как отметки привычек и рефлексии в приложении,
+    /// по местному времени — как даты задач.
+    static func day(_ date: Date, utc: Bool) -> String {
         let f = DateFormatter()
         f.calendar = Calendar(identifier: .gregorian)
         f.locale = Locale(identifier: "en_US_POSIX")
-        f.timeZone = TimeZone(identifier: "UTC")
+        f.timeZone = utc ? TimeZone(identifier: "UTC") : TimeZone.current
         f.dateFormat = "yyyy-MM-dd"
-        return f.string(from: Date())
+        return f.string(from: date)
     }
 }
 
@@ -106,16 +217,19 @@ enum AntiScrollNotification {
 
     /// Показывает баннер. Возвращает false, если iOS его не приняла.
     @available(iOS 26.0, *)
-    static func post(app: InterceptedApp, suggestion: AntiScrollSuggestion?) async -> Bool {
+    static func post(app: InterceptedApp, title: String?, offer: AntiScrollOffer) async -> Bool {
         let content = UNMutableNotificationContent()
-        content.title = (suggestion?.title ?? "Ты открыл {app}")
+        content.title = (title ?? "Ты открыл {app}")
             .replacingOccurrences(of: "{app}", with: app.label)
-        content.body = suggestion?.bodies.randomElement() ?? "Может, сначала короткая привычка?"
+        content.body = offer.bodies.randomElement() ?? ""
         // Без звука: баннер и так на виду, а звук при каждом открытии ленты раздражал бы.
         content.sound = nil
         // cap_extra — формат плагина LocalNotifications: в JS это придёт как
-        // notification.extra.wake при тапе по баннеру.
-        content.userInfo = ["cap_extra": ["wake": "oyan://wake?app=\(app.rawValue)&start=1"]]
+        // notification.extra.wake при тапе по баннеру. kind и id говорят
+        // приложению, что именно предлагалось: привычка, задача или рефлексия.
+        var url = "oyan://wake?app=\(app.rawValue)&start=1&kind=\(offer.type)"
+        if let habitId = offer.habitId { url += "&id=\(habitId)" }
+        content.userInfo = ["cap_extra": ["wake": url]]
 
         let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
         do {
@@ -124,18 +238,19 @@ enum AntiScrollNotification {
             return false
         }
         UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: lastKey)
-        appendLog(app: app.rawValue)
+        AntiScrollPicker.lastId = offer.id
+        appendLog(app: app.rawValue, type: offer.type)
         return true
     }
 
-    private static func appendLog(app: String) {
+    private static func appendLog(app: String, type: String) {
         let defaults = UserDefaults.standard
         var list: [[String: Any]] = []
         if let raw = defaults.string(forKey: logKey),
            let arr = try? JSONSerialization.jsonObject(with: Data(raw.utf8)) as? [[String: Any]] {
             list = arr
         }
-        list.append(["at": Int64(Date().timeIntervalSince1970 * 1000), "app": app])
+        list.append(["at": Int64(Date().timeIntervalSince1970 * 1000), "app": app, "type": type])
         if list.count > 50 { list = Array(list.suffix(50)) }
         if let data = try? JSONSerialization.data(withJSONObject: list),
            let s = String(data: data, encoding: .utf8) {
@@ -169,7 +284,7 @@ enum InterceptedApp: String, AppEnum {
 struct AntiScrollIntent: AppIntent {
     static let title: LocalizedStringResource = "Анти-скролл"
     static let description = IntentDescription(
-        "Предлагает короткую привычку вместо ленты. Если перехват на время отключён, ничего не делает."
+        "Предлагает короткое дело вместо ленты: привычку, задачу или рефлексию. Если перехват на время отключён, ничего не делает."
     )
 
     // Стартуем в фоне; на передний план выходим, только если нельзя показать баннер.
@@ -195,13 +310,9 @@ struct AntiScrollIntent: AppIntent {
                 AntiScrollDiagnostics.record(app: app.rawValue, decision: "cooldown")
                 return .result()
             }
-            let suggestion = AntiScrollSuggestion.loadForToday()
-            // Все привычки на сегодня сделаны — не давим, баннер не нужен.
-            if suggestion?.allDone == true {
-                AntiScrollDiagnostics.record(app: app.rawValue, decision: "done")
-                return .result()
-            }
-            if await AntiScrollNotification.post(app: app, suggestion: suggestion) {
+            let snapshot = AntiScrollSnapshot.load()
+            let offer = AntiScrollPicker.pick(from: snapshot)
+            if await AntiScrollNotification.post(app: app, title: snapshot?.title, offer: offer) {
                 AntiScrollDiagnostics.record(app: app.rawValue, decision: "notified")
                 return .result()
             }

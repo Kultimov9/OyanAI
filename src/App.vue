@@ -33,6 +33,7 @@ import {
   passActive,
   isLooping,
   wakeStartRequested,
+  wakeTarget,
 } from './lib/antiscroll'
 import {
   getPassUntil,
@@ -74,10 +75,15 @@ function routeWake(url) {
   if (url === lastWake.url && now - lastWake.at < 2000) return true
   lastWake = { url, at: now }
 
-  // Тап по баннеру анти-скролла: человек сам выбрал привычку — сразу к
-  // таймеру. Пропуск тут не мешает: это не автоматизация, а его решение.
+  // Тап по баннеру анти-скролла: человек сам выбрал предложенное — сразу к
+  // делу. Пропуск тут не мешает: это не автоматизация, а его решение.
   if (wakeStartRequested(url)) {
-    router.replace({ path: '/wake', query: { app, start: '1' } })
+    // kind и id — что именно предлагал баннер: привычку, задачу или рефлексию.
+    const { kind, id } = wakeTarget(url)
+    router.replace({
+      path: '/wake',
+      query: { app, start: '1', ...(kind ? { kind } : {}), ...(id ? { id } : {}) },
+    })
     return true
   }
 
@@ -175,12 +181,12 @@ onMounted(async () => {
     // и двойной загрузки не происходит.
     await store.ensureLoaded()
 
-    // Анти-скролл: баннер показывает нативная часть, а привычки живут здесь.
-    // Держим готовые тексты в актуальном виде: при смене привычек и языка,
-    // и при уходе в фон — к этому моменту мог наступить новый день.
+    // Анти-скролл: баннер показывает нативная часть, а привычки, задачи и
+    // рефлексии живут здесь. Держим снимок в актуальном виде: при любой их
+    // смене, смене языка и при уходе в фон — мог наступить новый день.
     if (antiScrollSupported()) {
       watch(
-        () => [store.habits, store.skippedHabits, locale.value],
+        () => [store.habits, store.skippedHabits, store.tasks, store.reflections, locale.value],
         () => syncWakeSuggestion(store),
         { deep: true, immediate: true },
       )

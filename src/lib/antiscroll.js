@@ -36,6 +36,14 @@ export function parseWakeUrl(url) {
 // Тап по баннеру анти-скролла: сразу к таймеру, минуя экран выбора.
 export const wakeStartRequested = (url) => /[?&]start=1(?:&|#|$)/.test(String(url || ''))
 
+// Что именно предлагал баннер: kind ('habit' | 'task' | 'reflection') и id
+// привычки. У баннеров, показанных до обновления, этих полей нет.
+export function wakeTarget(url) {
+  const m = /^oyan:\/\/wake\/?(?:\?([^#]*))?/i.exec(String(url || ''))
+  const q = new URLSearchParams(m?.[1] || '')
+  return { kind: q.get('kind') || '', id: q.get('id') || '' }
+}
+
 // Подстановка {n}, {word}, {habit} в шаблон предложения. Одна функция для
 // экрана перехвата и текстов баннера — чтобы они не разошлись.
 export const fillTemplate = (tpl, params) =>
@@ -47,18 +55,88 @@ export const MAX_WAKE_MINUTES = 5
 
 const durationOf = (h) => Number(h?.duration) || MAX_WAKE_MINUTES
 
-// Самая короткая из доступных сегодня привычек. На вход — уже отфильтрованный
-// список (не выполненные и не пропущенные сегодня). При равной длительности
-// берём первую — тот же порядок, что на главной.
-export function pickHabit(startable) {
-  let best = null
-  for (const h of startable || []) {
-    if (!best || durationOf(h) < durationOf(best)) best = h
-  }
-  return best
+export const wakeMinutes = (habit) => Math.max(1, Math.min(MAX_WAKE_MINUTES, durationOf(habit)))
+
+// ── Выбор предложения ──
+// Предлагаем только то, что можно сделать прямо сейчас, где бы человек ни был:
+//   1. привычку с context 'anywhere', не выполненную сегодня;
+//   2. если таких нет — действие внутри приложения: отметить задачу или
+//      записать рефлексию (вечером), случайно из применимых;
+//   3. если и этого нет — выбрать задачу, с которой начать.
+// Одно и то же два перехвата подряд не предлагаем.
+//
+// На вход — «снимок» из buildWakeSnapshot (useAntiScroll.js). Ту же логику
+// повторяет AntiScrollIntent.swift: баннер показывается без веб-части. Меняешь
+// здесь — меняй и там.
+
+export const REFLECTION_FROM_HOUR = 18
+export const PICK_TASK_ID = 'pick-task'
+export const REFLECTION_ID = 'reflection'
+
+const pad = (n) => String(n).padStart(2, '0')
+const utcDay = (d) => d.toISOString().split('T')[0]
+const localDayOf = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+
+const randomOf = (list, random) => list[Math.floor(random() * list.length)]
+
+// Без того, что предлагали в прошлый раз, — если после этого что-то остаётся.
+function withoutLast(list, lastId) {
+  const rest = list.filter((o) => o.id !== lastId)
+  return rest.length ? rest : list
 }
 
-export const wakeMinutes = (habit) => Math.max(1, Math.min(MAX_WAKE_MINUTES, durationOf(habit)))
+// Привычки, которые можно предложить. Отметки «сделано» и «пропущено» в снимке
+// относятся к дню snap.day: если он уже не сегодня, значит Oyan сегодня не
+// открывали и ни одна привычка ещё не выполнена.
+function habitOptions(snap, now) {
+  const fresh = snap.day === utcDay(now)
+  const done = new Set(fresh ? snap.done : [])
+  const skipped = new Set(fresh ? snap.skipped : [])
+  const pending = (snap.habits || []).filter((h) => !done.has(h.id))
+  // Сначала не пропущенные сегодня; пропущенные — только если других нет.
+  const startable = pending.filter((h) => !skipped.has(h.id))
+  return (startable.length ? startable : pending).map((h) => ({
+    id: `habit:${h.id}`,
+    type: 'habit',
+    habitId: h.id,
+    bodies: h.bodies,
+  }))
+}
+
+function fallbackOptions(snap, now, lastId, random) {
+  const options = []
+  // Задачи на сегодня и висящие с прошлых дней; запланированные наперёд — нет.
+  const today = localDayOf(now)
+  const due = (snap.tasks || []).filter((t) => t.date <= today)
+  if (due.length) {
+    const task = randomOf(
+      withoutLast(
+        due.map((t) => ({ id: `task:${t.id}`, type: 'task', taskId: t.id, bodies: [t.body] })),
+        lastId,
+      ),
+      random,
+    )
+    options.push(task)
+  }
+  if (snap.reflectionDay !== utcDay(now) && now.getHours() >= REFLECTION_FROM_HOUR) {
+    options.push({ id: REFLECTION_ID, type: 'reflection', bodies: [snap.reflectionBody] })
+  }
+  if (!options.length) {
+    options.push({ id: PICK_TASK_ID, type: 'task', bodies: [snap.pickTaskBody] })
+  }
+  return options
+}
+
+// Возвращает { id, type, bodies, habitId?, taskId? }.
+export function pickSuggestion(snap, { now = new Date(), lastId = '', random = Math.random } = {}) {
+  const habits = habitOptions(snap, now)
+  // Единственную подходящую привычку чередуем с запасным действием, а не
+  // повторяем каждый раз.
+  const onlyHabitWasLast = habits.length === 1 && habits[0].id === lastId
+  const pool =
+    habits.length && !onlyHabitWasLast ? habits : fallbackOptions(snap, now, lastId, random)
+  return randomOf(withoutLast(pool, lastId), random)
+}
 
 // Следующий шаблон текста: случайный, но не тот же, что в прошлый раз, —
 // иначе при двух шаблонах подряд повторы бросались бы в глаза.

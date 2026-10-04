@@ -24,6 +24,19 @@
       <template v-if="activeTab === 'habits'">
         <PairHabits />
 
+        <!-- Один раз: у привычек, созданных до появления отметки, стоит «где
+             угодно» — просим отметить те, что делаются только дома. -->
+        <div v-if="showContextHint" class="context-hint">
+          <House :size="18" class="hint-icon" />
+          <div class="hint-body">
+            <p class="hint-title">{{ t('habits.contextHintTitle') }}</p>
+            <p class="hint-text">{{ t('habits.contextHintText') }}</p>
+          </div>
+          <button class="hint-close" :aria-label="t('habits.gotIt')" @click="showContextHint = false">
+            <X :size="16" />
+          </button>
+        </div>
+
         <div class="section">
           <p class="section-label">{{ t('habits.todayLeft') }}</p>
           <div class="habit-list">
@@ -36,8 +49,24 @@
               <span class="emoji">{{ habit.emoji }}</span>
               <div class="info">
                 <p class="name">{{ habit.name }}</p>
-                <p class="duration">{{ habit.duration }} {{ t('habits.minutes') }}</p>
+                <p class="duration">
+                  {{ habit.duration }} {{ t('habits.minutes')
+                  }}<template v-if="contextSupported && habit.context === 'home'">
+                    · {{ t('habits.whereHome').toLowerCase() }}</template
+                  >
+                </p>
               </div>
+              <button
+                v-if="contextSupported"
+                class="vis-btn ctx-btn"
+                :class="{ on: habit.context === 'home' }"
+                :title="habit.context === 'home' ? t('habits.whereHome') : t('habits.whereAnywhere')"
+                :aria-label="t('habits.whereLabel')"
+                :aria-pressed="habit.context === 'home'"
+                @click.stop="toggleContext(habit)"
+              >
+                <House :size="16" />
+              </button>
               <button
                 class="vis-btn"
                 :class="{ on: habit.isPublic }"
@@ -63,6 +92,17 @@
                 <p class="name">{{ habit.name }}</p>
                 <p class="streak">{{ t('habits.streakDays', { n: habit.streak }) }}</p>
               </div>
+              <button
+                v-if="contextSupported"
+                class="vis-btn ctx-btn"
+                :class="{ on: habit.context === 'home' }"
+                :title="habit.context === 'home' ? t('habits.whereHome') : t('habits.whereAnywhere')"
+                :aria-label="t('habits.whereLabel')"
+                :aria-pressed="habit.context === 'home'"
+                @click.stop="toggleContext(habit)"
+              >
+                <House :size="16" />
+              </button>
               <button
                 class="vis-btn"
                 :class="{ on: habit.isPublic }"
@@ -109,6 +149,28 @@
               <label class="duration-label">{{ t('habits.minutesLabel', { n: newDuration }) }}</label>
               <input v-model="newDuration" type="range" min="1" max="60" class="slider" />
             </div>
+            <!-- Где привычку можно выполнить: анти-скролл предлагает только
+                 «где угодно». У парных привычек этой отметки нет. -->
+            <div v-if="contextSupported && !pairMode" class="where-row">
+              <span class="pair-toggle-label">{{ t('habits.whereLabel') }}</span>
+              <div class="where-seg">
+                <button
+                  class="seg-btn"
+                  :class="{ on: newContext === 'anywhere' }"
+                  @click="newContext = 'anywhere'"
+                >
+                  {{ t('habits.whereAnywhere') }}
+                </button>
+                <button
+                  class="seg-btn"
+                  :class="{ on: newContext === 'home' }"
+                  @click="newContext = 'home'"
+                >
+                  {{ t('habits.whereHome') }}
+                </button>
+              </div>
+            </div>
+
             <div class="pair-toggle-row" @click="newIsPublic = !newIsPublic">
               <span class="pair-toggle-label">{{ t('habits.visiblePublic') }}</span>
               <span class="pair-toggle" :class="{ on: newIsPublic }"><span class="knob" /></span>
@@ -309,7 +371,8 @@ import { shareInvite, copyText, inviteLink } from '../composables/share'
 import { pendingPairFriend } from '../composables/uiState'
 import { t } from '../i18n'
 import { useScreenRefresh } from '../composables/useScreenRefresh'
-import { Trash2, Eye, Lock } from 'lucide-vue-next'
+import { antiScrollSupported } from '../composables/useAntiScroll'
+import { Trash2, Eye, Lock, House, X } from 'lucide-vue-next'
 import ProgressChart from '../components/ProgressChart.vue'
 import PairHabits from '../components/PairHabits.vue'
 
@@ -387,6 +450,29 @@ async function toggleVisibility(habit) {
   await store.setHabitVisibility(habit.id, next)
 }
 
+// Где привычку можно выполнить. Отметка нужна только анти-скроллу, а он есть
+// лишь на iOS — на остальных платформах её не показываем.
+const CONTEXT_HINT_KEY = 'oyan-context-hint'
+const contextSupported = antiScrollSupported()
+const newContext = ref('anywhere')
+const showContextHint = ref(false)
+
+onMounted(() => {
+  if (!contextSupported || !store.habits.length) return
+  try {
+    if (!localStorage.getItem(CONTEXT_HINT_KEY)) {
+      showContextHint.value = true
+      localStorage.setItem(CONTEXT_HINT_KEY, '1')
+    }
+  } catch {
+    // приватный режим — подсказку не показываем, чтобы не всплывала каждый раз
+  }
+})
+
+function toggleContext(habit) {
+  store.setHabitContext(habit.id, habit.context === 'home' ? 'anywhere' : 'home')
+}
+
 const newEmoji = ref('⭐')
 const newName = ref('')
 const newDuration = ref(5)
@@ -426,12 +512,19 @@ async function addHabit() {
     const code = await pairsStore.createPair(name, newEmoji.value, Number(newDuration.value))
     if (code) inviteCode.value = code
   } else {
-    store.addHabit(name, newEmoji.value, Number(newDuration.value), newIsPublic.value)
+    store.addHabit(
+      name,
+      newEmoji.value,
+      Number(newDuration.value),
+      newIsPublic.value,
+      newContext.value,
+    )
   }
 
   newName.value = ''
   newEmoji.value = '⭐'
   newDuration.value = 5
+  newContext.value = 'anywhere'
   showEmojiPicker.value = false
   pairMode.value = false
   newIsPublic.value = false
@@ -606,6 +699,83 @@ function habitProgress(count) {
 }
 .vis-btn.on {
   color: #9a9a92;
+}
+.ctx-btn.on {
+  color: #f5f0e8;
+}
+.context-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 16px;
+  padding: 14px 14px 14px 16px;
+}
+.hint-icon {
+  color: #f5f0e8;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.hint-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.hint-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #ffffff;
+  line-height: 1.35;
+}
+.hint-text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #9a9a92;
+}
+.hint-close {
+  background: none;
+  border: none;
+  color: #5a5a55;
+  padding: 4px;
+  cursor: pointer;
+  display: flex;
+  flex-shrink: 0;
+}
+.where-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.where-seg {
+  display: flex;
+  background: #141414;
+  border: 1px solid #242424;
+  border-radius: 12px;
+  padding: 3px;
+  gap: 3px;
+}
+.seg-btn {
+  background: none;
+  border: none;
+  border-radius: 9px;
+  padding: 7px 12px;
+  font-size: 13px;
+  color: #9a9a92;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+.seg-btn.on {
+  background: #f5f0e8;
+  color: #0a0a0a;
+  font-weight: 600;
 }
 .add-form {
   background: #1a1a1a;

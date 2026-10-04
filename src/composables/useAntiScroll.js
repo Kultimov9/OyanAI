@@ -13,7 +13,6 @@ import {
   SNOOZE_MINUTES,
   nextTemplateIndex,
   recentBounces,
-  pickHabit,
   wakeMinutes,
   fillTemplate,
 } from '../lib/antiscroll'
@@ -109,34 +108,83 @@ export async function getIntentLastRun() {
 }
 
 // === Баннер вместо перехода в Oyan ===
-// Нативное действие показывает уведомление без веб-части, а привычки живут
-// здесь. Поэтому заранее складываем в Preferences (UserDefaults) готовые
-// тексты — AntiScrollIntent.swift читает их по ключу oyan-wake-suggestion.
+// Нативное действие показывает уведомление без веб-части, а привычки и задачи
+// живут здесь. Поэтому заранее складываем в Preferences (UserDefaults) снимок
+// с готовыми текстами — AntiScrollIntent.swift читает его по ключу
+// oyan-wake-suggestion и сам выбирает, что предложить.
 
 // Дата в том же виде, что и отметки привычек (UTC): иначе «сделано сегодня»
 // в приложении и в баннере разошлись бы около полуночи.
 const todayKey = () => new Date().toISOString().split('T')[0]
 
-export function buildWakeSuggestion(store) {
-  const habit = pickHabit(store.todayStartable) || pickHabit(store.todayPending)
+// Тексты предложения привычки — все шаблоны сразу, нативная часть берёт любой.
+export function habitOfferBodies(habit) {
   const minutes = wakeMinutes(habit)
-  const params = { n: minutes, word: plural(minutes, 'wake.minuteWord'), habit: habit?.name || '' }
+  const params = { n: minutes, word: plural(minutes, 'wake.minuteWord'), habit: habit.name }
+  return t('wake.offers').map((tpl) => fillTemplate(tpl, params))
+}
+
+// В снимок кладём не больше стольких задач: баннеру хватит, а UserDefaults
+// не место для длинных списков.
+const SNAPSHOT_TASKS = 12
+
+// Снимок всего, из чего выбирается предложение (см. pickSuggestion). Выбор
+// делается в момент перехвата, а не здесь: «после 18:00» и «не то же, что в
+// прошлый раз» заранее не посчитать.
+export function buildWakeSnapshot(store) {
+  const today = todayKey()
+  const latestReflection = store.reflections.reduce((max, r) => (r.date > max ? r.date : max), '')
   return {
-    date: todayKey(),
+    v: 2,
+    // День, к которому относятся done и skipped (UTC, как отметки привычек).
+    day: today,
     // {app} оставляем как есть — название подставит нативная часть.
     title: t('wake.opened', { app: '{app}' }),
-    bodies: habit ? t('wake.offers').map((tpl) => fillTemplate(tpl, params)) : [t('wake.notifyGeneric')],
-    // Все привычки сделаны — баннер не нужен, не давим.
-    allDone: !habit && store.habits.length > 0,
+    // Только то, что можно сделать где угодно: «дома» в дороге не предложишь.
+    habits: store.habits
+      .filter((h) => (h.context || 'anywhere') === 'anywhere')
+      .map((h) => ({ id: h.id, bodies: habitOfferBodies(h) })),
+    done: store.habits.filter((h) => h.completedDates.includes(today)).map((h) => h.id),
+    skipped: Object.keys(store.skippedHabits || {}).filter((id) => store.skippedHabits[id] === today),
+    // Невыполненные задачи с датами: нативная часть сама отсеет будущие.
+    tasks: store.tasks
+      .filter((task) => !task.done)
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .slice(0, SNAPSHOT_TASKS)
+      .map((task) => ({ id: task.id, date: task.date, body: t('wake.taskOffer', { task: task.text }) })),
+    reflectionDay: latestReflection || null,
+    reflectionBody: t('wake.reflectionOffer'),
+    pickTaskBody: t('wake.pickTaskOffer'),
+  }
+}
+
+// Что предлагали в прошлый раз. Хранится в Preferences (UserDefaults): его
+// читают и пишут и экран перехвата, и нативный баннер — иначе после баннера
+// экран мог бы предложить то же самое.
+const LAST_SUGGESTION_KEY = 'oyan-antiscroll-last-suggestion'
+
+export async function getLastSuggestionId() {
+  try {
+    return (await Preferences.get({ key: LAST_SUGGESTION_KEY })).value || ''
+  } catch {
+    return ''
+  }
+}
+
+export async function setLastSuggestionId(id) {
+  try {
+    await Preferences.set({ key: LAST_SUGGESTION_KEY, value: id })
+  } catch (e) {
+    console.log('last suggestion save error:', e)
   }
 }
 
 let lastSuggestion = ''
 
-// Пишем, только если тексты изменились: вызывается часто (смена привычек,
-// языка, уход в фон), а каждая запись — вызов в нативную часть.
+// Пишем, только если данные изменились: вызывается часто (смена привычек,
+// задач, языка, уход в фон), а каждая запись — вызов в нативную часть.
 export async function syncWakeSuggestion(store) {
-  const json = JSON.stringify(buildWakeSuggestion(store))
+  const json = JSON.stringify(buildWakeSnapshot(store))
   if (json === lastSuggestion) return
   try {
     await Preferences.set({ key: 'oyan-wake-suggestion', value: json })
@@ -160,7 +208,16 @@ export async function syncNotifiedLog() {
   const synced = Number(read(KEYS.notifiedSynced, 0)) || 0
   const fresh = list.filter((e) => Number(e.at) > synced)
   if (!fresh.length) return
-  for (const e of fresh) logEvent('wake_shown', { app: e.app, via: 'notification', at: e.at })
+  for (const e of fresh) {
+    logEvent('wake_shown', {
+      app: e.app,
+      via: 'notification',
+      at: e.at,
+      // У записей, сделанных до обновления, типа нет: тогда предлагались
+      // только привычки.
+      suggestion_type: e.type || 'habit',
+    })
+  }
   write(KEYS.notifiedSynced, Math.max(...fresh.map((e) => Number(e.at))))
 }
 

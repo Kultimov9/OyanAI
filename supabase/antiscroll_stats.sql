@@ -16,8 +16,9 @@ as $$
     from public.events
     where created_at > now() - make_interval(days => p_days)
       and type in (
-        'wake_shown', 'wake_habit_started', 'wake_passthrough', 'wake_snoozed',
-        'wake_habit_completed', 'antiscroll_setup_opened', 'antiscroll_link_copied'
+        'wake_shown', 'wake_habit_started', 'wake_action_started', 'wake_passthrough',
+        'wake_snoozed', 'wake_habit_completed', 'antiscroll_setup_opened',
+        'antiscroll_link_copied'
       )
   )
   select jsonb_build_object(
@@ -46,6 +47,29 @@ as $$
         where type in ('wake_shown', 'wake_habit_started', 'wake_passthrough')
         group by 1
       ) a
+    ), '[]'::jsonb),
+    -- Какой тип предложений показывают и какой принимают: привычка, задача,
+    -- рефлексия. «Принял» — начал таймер привычки (wake_habit_started) или
+    -- перешёл к задачам/рефлексии (wake_action_started).
+    -- У событий до появления suggestion_type типа нет: тогда предлагались
+    -- только привычки, поэтому считаем их как 'habit'.
+    'by_type', coalesce((
+      select jsonb_agg(
+        jsonb_build_object('type', stype, 'shown', shown, 'accepted', accepted)
+        order by shown desc
+      )
+      from (
+        select
+          case
+            when type = 'wake_habit_started' then 'habit'
+            else coalesce(payload->>'suggestion_type', 'habit')
+          end as stype,
+          count(*) filter (where type = 'wake_shown') as shown,
+          count(*) filter (where type in ('wake_habit_started', 'wake_action_started')) as accepted
+        from e
+        where type in ('wake_shown', 'wake_habit_started', 'wake_action_started')
+        group by 1
+      ) b
     ), '[]'::jsonb)
   );
 $$;
