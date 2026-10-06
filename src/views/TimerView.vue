@@ -5,7 +5,9 @@
     <div class="habit-info">
       <span class="habit-emoji">{{ habit?.emoji }}</span>
       <h2 class="habit-name">{{ habit?.name }}</h2>
-      <p class="hint">{{ t('timer.hint') }}</p>
+      <p class="hint">
+        {{ extended ? t('timer.shortDone', { n: overrideMinutes }) : t('timer.hint') }}
+      </p>
     </div>
 
     <div class="circle-wrap">
@@ -28,7 +30,20 @@
       <div class="timer-text">{{ formattedTime }}</div>
     </div>
 
-    <div class="actions">
+    <!-- Укороченный таймер досижен, привычка уже засчитана: можно досидеть до
+         обычной длительности или закончить. «Отложить» и «Пропустить» тут
+         не нужны — откладывать нечего. -->
+    <div v-if="extended" class="actions">
+      <button v-if="offerFull" class="main-btn" @click="continueFull">
+        {{ t('timer.continueTo', { n: habit?.duration }) }}
+      </button>
+      <button v-else-if="running" class="main-btn pause" @click="pause">{{ t('timer.pause') }}</button>
+      <button v-else class="main-btn" @click="resume">{{ t('timer.resume') }}</button>
+
+      <button class="secondary-btn" @click="enough">{{ t('timer.enough') }}</button>
+    </div>
+
+    <div v-else class="actions">
       <button v-if="!started" class="main-btn" @click="start">{{ t('timer.start') }}</button>
       <button v-else-if="running" class="main-btn pause" @click="pause">{{ t('timer.pause') }}</button>
       <button v-else class="main-btn" @click="resume">{{ t('timer.resume') }}</button>
@@ -59,8 +74,20 @@ const overrideMinutes = computed(() => {
   const m = Number(route.query.min)
   return Number.isFinite(m) && m > 0 && m <= 180 ? m : null
 })
+// Уменьшенная планка короче самой привычки (анти-скролл и пуши-возвращения
+// дают 5 минут на 19-минутный «Подкаст»). Досидев её, человек может продолжить
+// до обычной длительности — тогда таймер считает уже от полной.
+const canExtend = computed(
+  () => overrideMinutes.value != null && overrideMinutes.value < (habit.value?.duration || 0),
+)
+const extended = ref(false)
+// Экран выбора «продолжить / хватит» сразу после укороченного таймера.
+const offerFull = ref(false)
+
 const totalSeconds = computed(
-  () => (overrideMinutes.value || habit.value?.duration || 5) * 60,
+  () =>
+    ((extended.value ? habit.value?.duration : overrideMinutes.value || habit.value?.duration) ||
+      5) * 60,
 )
 
 const secondsLeft = ref(totalSeconds.value)
@@ -84,6 +111,8 @@ onMounted(() => {
   }
 
   started.value = true
+  // Таймер уже был продлён до полной длительности — считаем от неё.
+  if (saved.extra) extended.value = true
   elapsed = saved.elapsedBefore
   if (saved.running) {
     startTime = saved.startedAt
@@ -174,6 +203,7 @@ function markReengageOpened() {
 }
 
 function complete() {
+  if (extended.value) return finishExtended()
   store.activeTimer = null
   logEvent('timer_completed', { habitId: route.params.id, name: habit.value?.name })
   // Человек не просто открыл пуш, а досидел таймер — самый ценный сигнал.
@@ -193,6 +223,54 @@ function complete() {
     })
   }
   store.completeHabit(habit.value.id)
+  // Привычка засчитана в любом случае. Если она длиннее планки — предлагаем
+  // досидеть: таймер встаёт на паузу на остатке полной длительности.
+  if (canExtend.value) {
+    elapsed = overrideMinutes.value * 60
+    extended.value = true
+    offerFull.value = true
+    secondsLeft.value = Math.max(0, totalSeconds.value - elapsed)
+    return
+  }
+  router.replace('/')
+}
+
+function continueFull() {
+  offerFull.value = false
+  started.value = true
+  running.value = true
+  startTime = Date.now()
+  store.activeTimer = {
+    habitId: route.params.id,
+    startedAt: startTime,
+    elapsedBefore: elapsed,
+    running: true,
+    // Метка для восстановления: считать от полной длительности, а не от планки.
+    extra: true,
+  }
+  logEvent('timer_extended', {
+    habitId: route.params.id,
+    from: overrideMinutes.value,
+    to: habit.value?.duration,
+  })
+  tick()
+  enableWakeLock()
+}
+
+function finishExtended() {
+  store.activeTimer = null
+  logEvent('timer_extended_completed', {
+    habitId: route.params.id,
+    minutes: habit.value?.duration,
+  })
+  router.replace('/')
+}
+
+// «Хватит на сегодня»: привычка уже засчитана, просто выходим.
+function enough() {
+  clearInterval(interval)
+  disableWakeLock()
+  store.activeTimer = null
   router.replace('/')
 }
 

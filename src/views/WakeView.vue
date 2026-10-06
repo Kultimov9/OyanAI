@@ -60,14 +60,15 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useHabitsStore } from '../stores/habits'
 import { logEvent } from '../composables/useAnalytics'
-import { t, plural } from '../i18n'
-import { APPS, pickSuggestion, wakeMinutes, fillTemplate } from '../lib/antiscroll'
+import { t } from '../i18n'
+import { APPS, pickSuggestion, wakeMinutes } from '../lib/antiscroll'
 import {
   grantPass,
   grantSnooze,
   nextTemplate,
   openExternal,
   buildWakeSnapshot,
+  habitOfferBodies,
   getLastSuggestionId,
   setLastSuggestionId,
 } from '../composables/useAntiScroll'
@@ -113,14 +114,11 @@ const originText = computed(() =>
 // Шаблон выбирается один раз при открытии экрана, а не при каждой перерисовке,
 // чтобы текст не менялся на глазах.
 const templateIndex = ref(0)
+// Те же тексты, что и у баннера: для длинной привычки — «начни», а не «сделай».
 const offerText = computed(() => {
-  const offers = t('wake.offers')
-  const tpl = offers[templateIndex.value] || offers[0]
-  return fillTemplate(tpl, {
-    n: minutes.value,
-    word: plural(minutes.value, 'wake.minuteWord'),
-    habit: habit.value?.name || '',
-  })
+  if (!habit.value) return ''
+  const bodies = habitOfferBodies(habit.value)
+  return bodies[templateIndex.value] || bodies[0]
 })
 
 const error = ref('')

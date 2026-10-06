@@ -14,6 +14,7 @@ import {
   nextTemplateIndex,
   recentBounces,
   wakeMinutes,
+  MAX_WAKE_MINUTES,
   fillTemplate,
 } from '../lib/antiscroll'
 import { t, plural } from '../i18n'
@@ -118,10 +119,13 @@ export async function getIntentLastRun() {
 const todayKey = () => new Date().toISOString().split('T')[0]
 
 // Тексты предложения привычки — все шаблоны сразу, нативная часть берёт любой.
+// Привычку длиннее планки за эти минуты не выполнить («Подкаст» на 19 минут —
+// «всего 5 минут» звучало бы как ошибка), поэтому для неё зовём начать.
 export function habitOfferBodies(habit) {
   const minutes = wakeMinutes(habit)
   const params = { n: minutes, word: plural(minutes, 'wake.minuteWord'), habit: habit.name }
-  return t('wake.offers').map((tpl) => fillTemplate(tpl, params))
+  const long = Number(habit.duration) > MAX_WAKE_MINUTES
+  return t(long ? 'wake.offersLong' : 'wake.offers').map((tpl) => fillTemplate(tpl, params))
 }
 
 // В снимок кладём не больше стольких задач: баннеру хватит, а UserDefaults
