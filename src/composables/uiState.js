@@ -14,5 +14,9 @@ export const nudgeToast = ref(null)
 // Общий инфо-тост: { text, to } (to — маршрут для тапа «Открыть») или null.
 export const appToast = ref(null)
 
+// Короткое подтверждение действия в маленькой плашке сверху: { text, tone }
+// (tone 'good' — зелёная точка) или null. Исчезает само, см. StatusPill.vue.
+export const statusPill = ref(null)
+
 // Друг, выбранный на экране «Друзья» для создания общей привычки: { id, username } или null.
 export const pendingPairFriend = ref(null)

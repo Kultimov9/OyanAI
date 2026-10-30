@@ -3,6 +3,7 @@
     <router-view />
     <NudgeToast />
     <AppToast />
+    <StatusPill />
     <BottomNav v-if="!hideNav" />
   </div>
 </template>
@@ -15,6 +16,7 @@ import { LocalNotifications } from '@capacitor/local-notifications'
 import BottomNav from './components/BottomNav.vue'
 import NudgeToast from './components/NudgeToast.vue'
 import AppToast from './components/AppToast.vue'
+import StatusPill from './components/StatusPill.vue'
 import { setupNotifications, notifyNudge, notifyInfo } from './composables/useNotifications'
 import { generateNotifications } from './composables/useAI'
 import { initPush } from './composables/usePush'

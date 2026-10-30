@@ -60,8 +60,6 @@
         </div>
       </div>
 
-      <div v-if="saved" class="success-banner">{{ t('reflection.savedBanner') }}</div>
-
       <button class="save-btn" @click="save" :disabled="saved">
         {{ saved ? t('reflection.savedBtn') : t('common.save') }}
       </button>
@@ -90,6 +88,7 @@ import { t } from '../i18n'
 import { ref, computed } from 'vue'
 // import { useRouter } from 'vue-router'
 import { useHabitsStore } from '../stores/habits'
+import { statusPill } from '../composables/uiState'
 
 // const router = useRouter()
 const store = useHabitsStore()
@@ -137,6 +136,7 @@ function save() {
     note: note.value,
   })
   saved.value = true
+  statusPill.value = { text: t('reflection.savedBanner'), tone: 'good' }
   setTimeout(() => {
     saved.value = false
   }, 3000)
@@ -310,15 +310,6 @@ function moodEmoji(value) {
   color: #9a9a92;
   margin: 0;
   font-style: italic;
-}
-.success-banner {
-  background: #1a1a1a;
-  color: #f5f0e8;
-  border-radius: 12px;
-  padding: 14px 16px;
-  font-size: 15px;
-  font-weight: 500;
-  text-align: center;
 }
 .save-btn:disabled {
   background: #f5f0e8;
