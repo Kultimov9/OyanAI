@@ -7,7 +7,10 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Override point for customization after application launch.
+        // Системное «Отменить ввод текста» по встряхиванию: в WebView оно
+        // всплывает от случайной тряски телефона в кармане или на ходу, а
+        // отменять в Oyan через него нечего.
+        application.applicationSupportsShakeToEdit = false
         return true
     }
 
