@@ -4,6 +4,7 @@
     <NudgeToast />
     <AppToast />
     <StatusPill />
+    <AvatarViewer />
     <BottomNav v-if="!hideNav" />
   </div>
 </template>
@@ -17,6 +18,7 @@ import BottomNav from './components/BottomNav.vue'
 import NudgeToast from './components/NudgeToast.vue'
 import AppToast from './components/AppToast.vue'
 import StatusPill from './components/StatusPill.vue'
+import AvatarViewer from './components/AvatarViewer.vue'
 import { setupNotifications, notifyNudge, notifyInfo } from './composables/useNotifications'
 import { generateNotifications } from './composables/useAI'
 import { initPush } from './composables/usePush'
@@ -28,6 +30,7 @@ import { logLoginEvent, setupResumeTracking } from './lib/loginEvents'
 import { logEvent } from './composables/useAnalytics'
 import { nudgeToast, appToast } from './composables/uiState'
 import { locale } from './i18n'
+import { syncTimezone } from './composables/useWeekly'
 import {
   APPS,
   UNKNOWN_APP,
@@ -57,7 +60,7 @@ const RESUME_THROTTLE_MS = 30_000
 // проверяется префиксом, а не точным совпадением.
 const hideNav = computed(
   () =>
-    ['/onboarding', '/auth', '/profile', '/friends', '/wake', '/antiscroll'].includes(route.path) ||
+    ['/onboarding', '/auth', '/profile', '/friends', '/wake', '/antiscroll', '/week'].includes(route.path) ||
     route.path.startsWith('/friend/'),
 )
 
@@ -199,6 +202,10 @@ onMounted(async () => {
       CapApp.addListener('resume', () => syncNotifiedLog())
     }
 
+    // Часовой пояс — в профиль: по нему сервер шлёт «Итоги недели» в
+    // воскресенье в 19:00 по местному времени.
+    syncTimezone(session.user.id)
+
     // Remote push: инициализация и переход по тапу. Разрешение здесь НЕ
     // запрашиваем — только в конце онбординга и на экране «Друзья».
     initPush({
@@ -212,6 +219,8 @@ onMounted(async () => {
           })
         } else if (data?.screen === 'friends') router.push('/friends')
         else if (data?.screen === 'pair') router.push('/habits')
+        // «Итоги недели готовы» — воскресный пуш.
+        else if (data?.screen === 'week') router.push('/week')
       },
     })
 

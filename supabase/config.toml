@@ -11,3 +11,7 @@ verify_jwt = false
 # Вызывается кроном из БД — пользовательского JWT нет, доступ по x-push-secret.
 [functions.reengage]
 verify_jwt = false
+
+# Итоги недели: тоже крон из БД, доступ по x-push-secret.
+[functions.weekly]
+verify_jwt = false

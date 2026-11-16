@@ -25,7 +25,7 @@ const KEYS = {
   pass: 'oyan-wake-pass-until',
   bounces: 'oyan-wake-bounces',
   template: 'oyan-wake-template',
-  announce: 'oyan-antiscroll-announce-seen',
+  announceUntil: 'oyan-antiscroll-announce-until',
   notifiedSynced: 'oyan-antiscroll-notified-synced',
 }
 
@@ -225,8 +225,17 @@ export async function syncNotifiedLog() {
   write(KEYS.notifiedSynced, Math.max(...fresh.map((e) => Number(e.at))))
 }
 
-export const announceSeen = () => Boolean(read(KEYS.announce, false))
-export const markAnnounceSeen = () => write(KEYS.announce, true)
+// Баннер на главной висит, пока анти-скролл не заработает. Крестик прячет его
+// не навсегда, а на несколько дней: фича главная, но и надоедать не должна.
+const ANNOUNCE_SNOOZE_DAYS = 3
+
+export const announceSnoozed = (now = Date.now()) => Number(read(KEYS.announceUntil, 0)) > now
+export const snoozeAnnounce = (now = Date.now()) =>
+  write(KEYS.announceUntil, now + ANNOUNCE_SNOOZE_DAYS * 86_400_000)
+
+// Настроен ли анти-скролл: действие «Анти-скролл» хотя бы раз запускалось.
+// Открыть настройку ещё не значит довести автоматизацию до конца.
+export const antiScrollConfigured = async () => Boolean(await getIntentLastRun())
 
 // Открывает другое приложение по схеме. Возвращает false, если не вышло —
 // например, приложение не установлено.

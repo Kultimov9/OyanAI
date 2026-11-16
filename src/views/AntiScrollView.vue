@@ -1,7 +1,7 @@
 <template>
   <div class="antiscroll">
     <div class="page-header">
-      <button class="back-btn" @click="router.replace('/profile')">{{ t('common.back') }}</button>
+      <button class="back-btn" @click="goBack">{{ t('common.back') }}</button>
       <h1 class="title">{{ t('antiscroll.title') }}</h1>
       <span />
     </div>
@@ -95,6 +95,13 @@ import {
 } from '../composables/useAntiScroll'
 
 const router = useRouter()
+
+// Сюда приходят и из профиля, и из быстрой настройки на главной — возвращаем
+// туда, откуда пришли. Без истории (открыли по ссылке) — в профиль.
+function goBack() {
+  if (window.history.state?.back) router.back()
+  else router.replace('/profile')
+}
 
 const apps = APP_KEYS.map((k) => APPS[k])
 // Порядок выбранных — как в списке приложений, а не как нажимали.

@@ -20,3 +20,6 @@ export const statusPill = ref(null)
 
 // Друг, выбранный на экране «Друзья» для создания общей привычки: { id, username } или null.
 export const pendingPairFriend = ref(null)
+
+// Аватар, открытый на весь экран: адрес картинки или null. См. AvatarViewer.vue.
+export const avatarViewer = ref(null)

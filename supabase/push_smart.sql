@@ -13,7 +13,7 @@ alter table public.profiles add column if not exists active_hour_updated_at time
 create table if not exists public.push_log (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users (id) on delete cascade,
-  -- social | reengage | reminder
+  -- social | reengage | reminder | weekly
   type text not null,
   -- час отправки по местному времени пользователя — для сводки в админке
   hour int,

@@ -75,17 +75,18 @@
 
     <button class="secondary-btn" @click="router.push('/habits')">{{ t('home.allHabits') }}</button>
 
-    <!-- Анонс анти-скролла: показывается один раз, пока не закроют или не
-         перейдут в настройку. Ниже основных действий, чтобы не спорить с ними. -->
+    <!-- Анти-скролл: баннер висит, пока автоматизация не заработает. Включается
+         прямо здесь, в листе снизу, — без перехода в профиль. -->
     <div v-if="showAntiScrollAnnounce" class="announce">
       <div class="announce-body" role="button" tabindex="0" @click="openAntiScroll" @keydown.enter="openAntiScroll">
         <span class="announce-badge">{{ t('home.antiscrollBadge') }}</span>
         <p class="announce-title">{{ t('home.antiscrollTitle') }}</p>
         <p class="announce-text">{{ t('home.antiscrollText') }}</p>
-        <span class="announce-cta">{{ t('home.antiscrollCta') }} →</span>
+        <span class="announce-cta">{{ t('home.antiscrollCta') }}</span>
       </div>
       <button class="announce-close" :aria-label="t('common.cancel')" @click="dismissAntiScroll">×</button>
     </div>
+    <AntiScrollSetup :open="antiScrollSetupOpen" @close="antiScrollSetupOpen = false" @done="antiScrollDone" />
     <div
       v-if="!noHabits"
       class="challenge-card"
@@ -135,22 +136,39 @@ import { generateGreeting } from '../composables/useAI'
 import { scheduleEveningReminder } from '../composables/useNotifications'
 import { noHabitsBannerHidden as noHabitsHidden } from '../composables/uiState'
 import logoUrl from '@/assets/logo-wordmark.png'
-import { antiScrollSupported, announceSeen, markAnnounceSeen } from '../composables/useAntiScroll'
+import AntiScrollSetup from '../components/AntiScrollSetup.vue'
+import {
+  antiScrollSupported,
+  antiScrollConfigured,
+  announceSnoozed,
+  snoozeAnnounce,
+} from '../composables/useAntiScroll'
 
 const router = useRouter()
 const store = useHabitsStore()
 
-// Анонс анти-скролла: только на iOS и только пока не видели.
-const showAntiScrollAnnounce = ref(antiScrollSupported() && !announceSeen())
+// Баннер анти-скролла: только на iOS и пока автоматизация ни разу не сработала.
+const showAntiScrollAnnounce = ref(false)
+const antiScrollSetupOpen = ref(false)
+
+async function refreshAntiScrollAnnounce() {
+  if (!antiScrollSupported() || announceSnoozed()) return
+  showAntiScrollAnnounce.value = !(await antiScrollConfigured())
+}
+useScreenRefresh(refreshAntiScrollAnnounce)
 
 function dismissAntiScroll() {
-  markAnnounceSeen()
+  snoozeAnnounce()
   showAntiScrollAnnounce.value = false
 }
 
 function openAntiScroll() {
-  dismissAntiScroll()
-  router.push('/antiscroll')
+  antiScrollSetupOpen.value = true
+}
+
+function antiScrollDone() {
+  antiScrollSetupOpen.value = false
+  showAntiScrollAnnounce.value = false
 }
 
 // Данные могли измениться на другом устройстве — обновляем при каждом входе.
@@ -588,10 +606,14 @@ const challengeProgress = computed(() => {
   color: #9a9a92;
 }
 .announce-cta {
-  margin-top: 4px;
+  align-self: flex-start;
+  margin-top: 8px;
+  background: #f5f0e8;
+  color: #0a0a0a;
+  border-radius: 10px;
+  padding: 9px 16px;
   font-size: 14px;
   font-weight: 600;
-  color: #f5f0e8;
 }
 .announce-close {
   position: absolute;

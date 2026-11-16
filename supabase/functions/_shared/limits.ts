@@ -21,7 +21,7 @@ const MAX_PER_DAY_NON_SOCIAL = 1
 const IGNORED_STREAK = 5
 const SLOWDOWN_DAYS = 3
 
-export type PushType = 'social' | 'reengage' | 'reminder'
+export type PushType = 'social' | 'reengage' | 'reminder' | 'weekly'
 
 export type SendDecision = { allow: true } | { allow: false; reason: string }
 

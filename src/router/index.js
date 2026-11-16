@@ -15,6 +15,7 @@ import FriendProfileView from '../views/FriendProfileView.vue'
 import BlockedView from '../views/BlockedView.vue'
 import WakeView from '../views/WakeView.vue'
 import AntiScrollView from '../views/AntiScrollView.vue'
+import WeekView from '../views/WeekView.vue'
 
 const routes = [
   { path: '/', component: HomeView },
@@ -31,6 +32,7 @@ const routes = [
   { path: '/blocked', component: BlockedView },
   { path: '/wake', component: WakeView },
   { path: '/antiscroll', component: AntiScrollView },
+  { path: '/week', component: WeekView },
 ]
 
 const router = createRouter({

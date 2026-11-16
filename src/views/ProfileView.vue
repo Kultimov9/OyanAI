@@ -7,10 +7,14 @@
 
     <div class="content">
       <!-- Аватар -->
-      <button class="avatar-big" :class="{ img: store.avatarUrl }" @click="pickAvatar">
+      <!-- Нажатие на фото открывает его на весь экран; пока фото нет — сразу
+           выбор. Сменить фото — отдельной кнопкой под аватаром. -->
+      <button class="avatar-big" :class="{ img: store.avatarUrl }" @click="openAvatar">
         <img v-if="store.avatarUrl" :src="store.avatarUrl" alt="" />
         <span v-else class="avatar-letter">{{ avatarLetter }}</span>
-        <span class="avatar-edit">{{ uploading ? '...' : t('profile.changePhoto') }}</span>
+      </button>
+      <button class="avatar-change" :disabled="uploading" @click="pickAvatar">
+        {{ uploading ? '...' : t('profile.changePhoto') }}
       </button>
       <p v-if="avatarError" class="field-error">{{ avatarError }}</p>
 
@@ -68,6 +72,15 @@
         <button v-if="antiScroll" class="nav-row" @click="router.push('/antiscroll')">
           <span class="nav-icon"><Hand :size="18" /></span>
           <span class="nav-label">{{ t('profile.antiscroll') }}</span>
+          <span class="nav-right">
+            <span class="chevron">›</span>
+          </span>
+        </button>
+
+        <!-- Итоги прошлых недель и карточка, которой можно поделиться. -->
+        <button class="nav-row" @click="router.push('/week')">
+          <span class="nav-icon"><CalendarDays :size="18" /></span>
+          <span class="nav-label">{{ t('profile.weeks') }}</span>
           <span class="nav-right">
             <span class="chevron">›</span>
           </span>
@@ -159,12 +172,13 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera'
-import { Users, Globe, Check, Ban, Sparkles, Hand } from 'lucide-vue-next'
+import { Users, Globe, Check, Ban, Sparkles, Hand, CalendarDays } from 'lucide-vue-next'
 import { useHabitsStore } from '../stores/habits'
 import { useFriendsStore } from '../stores/friends'
 import AiConsent from '../components/AiConsent.vue'
 import { antiScrollSupported } from '../composables/useAntiScroll'
 import { logEvent } from '../composables/useAnalytics'
+import { avatarViewer } from '../composables/uiState'
 import { t, locale, setLocale, localeLabel, LOCALES } from '../i18n'
 import { useScreenRefresh } from '../composables/useScreenRefresh'
 
@@ -243,6 +257,11 @@ useScreenRefresh(() => {
 })
 
 onMounted(() => logEvent('profile_opened', {}))
+
+function openAvatar() {
+  if (store.avatarUrl) avatarViewer.value = store.avatarUrl
+  else pickAvatar()
+}
 
 async function pickAvatar() {
   if (uploading.value) return
@@ -352,20 +371,14 @@ async function logout() {
   font-weight: 700;
   color: #f5f0e8;
 }
-.avatar-edit {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background: rgba(0, 0, 0, 0.55);
-  color: #f5f0e8;
-  font-size: 10px;
-  padding: 4px 6px;
-  /* Подпись лежит на круглом аватаре: длинная строка на другом языке иначе
-     вылезает за края. Обрезаем, а не ломаем верстку. */
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.avatar-change {
+  margin-top: -6px;
+  background: none;
+  border: none;
+  padding: 4px 10px;
+  font-size: 14px;
+  color: #9a9a92;
+  cursor: pointer;
 }
 .section {
   width: 100%;

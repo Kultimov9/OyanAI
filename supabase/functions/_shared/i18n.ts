@@ -15,6 +15,8 @@ type Dict = {
   friendRequest: string
   pairInvite: string
   reengageFallback: string
+  weeklyTitle: string
+  weeklyBody: string
   // Формы счётных слов: [1, 2-4, 5+]. В казахском форма одна.
   dayWord: string[]
   minuteWord: string[]
@@ -30,6 +32,8 @@ const MESSAGES: Record<string, Dict> = {
     friendRequest: '{nick} хочет добавить тебя в друзья',
     pairInvite: '{nick} зовёт делать {habit} вместе',
     reengageFallback: '{days} {dayWord} без «{habit}» — бывает. Начнём заново с {minutes} {minuteWord}?',
+    weeklyTitle: 'Итоги недели готовы',
+    weeklyBody: 'Посмотри, что получилось за эти семь дней.',
     dayWord: ['день', 'дня', 'дней'],
     // Родительный падеж после «с»: с 1 минуты, с 2 минут, с 5 минут.
     minuteWord: ['минуты', 'минут', 'минут'],
@@ -43,6 +47,8 @@ const MESSAGES: Record<string, Dict> = {
     friendRequest: '{nick} сені досқа қосқысы келеді',
     pairInvite: '{nick} {habit} бірге жасауға шақырады',
     reengageFallback: '«{habit}» жоқ {days} {dayWord} — болады. {minutes} {minuteWord} қайта бастаймыз ба?',
+    weeklyTitle: 'Апта қорытындысы дайын',
+    weeklyBody: 'Осы жеті күнде не шыққанын қара.',
     dayWord: ['күн'],
     minuteWord: ['минуттан'],
     promptLang: 'на казахском языке (қазақ тілінде)',

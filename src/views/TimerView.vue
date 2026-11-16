@@ -259,9 +259,15 @@ function continueFull() {
 
 function finishExtended() {
   store.activeTimer = null
+  // fromWake и extra — для итогов недели: минуты сверх планки, досиженные
+  // после перехвата, тоже идут в «минуты дела вместо скролла».
+  const fromWake = route.query.from === 'wake' && route.query.test !== '1'
   logEvent('timer_extended_completed', {
     habitId: route.params.id,
     minutes: habit.value?.duration,
+    ...(fromWake
+      ? { fromWake: true, extra: Math.max(0, (habit.value?.duration || 0) - overrideMinutes.value) }
+      : {}),
   })
   router.replace('/')
 }

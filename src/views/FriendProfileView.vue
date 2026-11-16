@@ -22,10 +22,16 @@
     <div v-else-if="data" class="content">
       <!-- Шапка -->
       <div class="hero">
-        <span class="avatar-big" :class="{ img: data.avatar_url }">
+        <!-- Фото друга открывается на весь экран; без фото нажимать нечего. -->
+        <button
+          class="avatar-big"
+          :class="{ img: data.avatar_url }"
+          :disabled="!data.avatar_url"
+          @click="avatarViewer = data.avatar_url"
+        >
           <img v-if="data.avatar_url" :src="data.avatar_url" alt="" />
           <span v-else>{{ initial }}</span>
-        </span>
+        </button>
         <p class="nick">{{ nick }}</p>
         <p class="joined">{{ t('friendProfile.joined', { date: joined }) }}</p>
       </div>
@@ -120,7 +126,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { Lock } from 'lucide-vue-next'
 import { supabase } from '../lib/supabase'
 import { logEvent } from '../composables/useAnalytics'
-import { pendingPairFriend } from '../composables/uiState'
+import { pendingPairFriend, avatarViewer } from '../composables/uiState'
 import UserActions from '../components/UserActions.vue'
 import { t } from '../i18n'
 
@@ -313,6 +319,11 @@ watch(friendId, (id) => {
   font-size: 34px;
   font-weight: 700;
   overflow: hidden;
+  padding: 0;
+  cursor: pointer;
+}
+.avatar-big:disabled {
+  cursor: default;
 }
 .avatar-big img {
   width: 100%;
